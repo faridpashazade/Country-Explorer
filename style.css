@@ -1,0 +1,227 @@
+body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+    background-image: url('/how-many-countries-are-there-in-the-world.png');
+    background-size: cover;
+    background-position: center;
+    color: #333;
+    transition: background-color 0.5s ease;
+}
+
+.dark-mode body {
+    background-image: url('/how-many-countries-are-there-in-the-world-dark.png');
+    background-color: #222;
+    color: #f4f4f4;
+}
+
+.main {
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 40px auto;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+}
+
+h1 {
+    font-size: 36px;
+    margin-bottom: 20px;
+    color: #007bff;
+}
+
+h4 {
+    font-size: 18px;
+    margin-left: 15px;
+    color: #555;
+}
+
+.form {
+    margin-bottom: 20px;
+    gap: 10px;
+}
+
+input[type="text"], 
+input[type="number"], 
+select {
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    width: 100%;
+    max-width: 300px;
+    box-sizing: border-box;
+}
+
+
+button {
+    font-size: 16px;
+    color: white;
+    background-color: #000000;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+.country-item {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    text-align: center;
+    max-width: 100%;
+}
+
+.country-item img {
+    width: 100px;
+    height: auto;
+    margin-bottom: 10px;
+}
+
+.country-item h2 {
+    font-size: 18px;
+    margin: 10px 0;
+    word-wrap: break-word;
+    min-height: 48px; 
+}
+
+.country-item p {
+    font-size: 14px;
+    margin: 5px 0;
+}
+.favorite-btn {
+    background-color: #007bff;
+    color: white;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.favorite-btn.remove {
+    background-color: #dc3545;
+}
+
+.favorite-btn:hover {
+    background-color: #0056b3;
+}
+
+.favorite-btn.remove:hover {
+    background-color: #c82333;
+}
+
+.favorites-toggle-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #007bff;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s;
+}
+
+.favorites-toggle-btn:hover {
+    background-color: #0056b3;
+}
+
+.favorites-list {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 350px;
+    max-height: 400px;
+    background: #fff;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: none;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.favorites-list h3 {
+    font-size: 18px;
+    margin-top: 0;
+    padding-bottom: 10px;
+    color: #007bff;
+    border-bottom: 2px solid #ddd;
+}
+
+.favorites-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.favorites-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    transition: background-color 0.3s;
+}
+
+.favorites-list li:hover {
+    background-color: #e9ecef;
+}
+
+.favorites-list img {
+    max-width: 50px;
+    height: auto;
+    border-radius: 4px;
+}
+#result {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+}
+
+#result .country-item {
+    flex: 1 1 200px; 
+}
+@media (max-width: 600px) {
+    .space{
+        display: none;
+    }
+    .favorites-list{
+        height:200px;
+        width: 200px;
+    }
+
+ }
+ #search-btn {
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.fa-solid {
+    vertical-align: middle;
+}
+.filters{
+    margin-top: 10px;
+}
+    

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Country Explorer</title>
+    <link rel="stylesheet" href="Css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <style>
+     
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div class="container">
+            <h1>Countries Explorer</h1>
+            <h4 style="margin-left: 15px;">Let's explore the countries</h4>
+            <div class="form">
+                <input style="display: inline-block;" type="text" id="country" placeholder="Enter the name of the country here...">
+                <button style="height: 40px; width: 70px; text-align: center;display: inline-block;" id="search-btn"><i class="fa-solid fa-magnifying-glass"></i></button>
+                <div class="filters">
+                    <label for="continent"></label>
+                    <select id="continent">
+                        <option value="">Continent</option>
+                        <option value="Africa">Africa</option>
+                        <option value="Asia">Asia</option>
+                        <option value="Europe">Europe</option>
+                        <option value="North America">North America</option>
+                        <option value="South America">South America</option>
+                    </select>
+                    <br>
+                    <label for="min-population"></label>
+                    <input min="0" type="number" id="min-population" placeholder="Minimum population">
+                    <label for="max-population"> <span class="space">━</span></label>
+                    <input min="0" type="number" id="max-population" placeholder="Maximum population">
+                    <br>
+                    <label for="min-area"></label>
+                    <input min="0" type="number" id="min-area" placeholder="Minimum area (km²)">
+                    <label for="max-area"><span class="space">━</span></label>
+                    <input min="0" type="number" id="max-area" placeholder="Maximum area (km²)">
+                </div>
+            </div>
+            <div id="result"></div>
+        </div>
+    </div>
+
+    
+    <button class="favorites-toggle-btn" onclick="toggleFavorites()">Show Favorites</button>
+
+
+    <div style="overflow: scroll;" class="favorites-list">
+        <h3>My Favorite Countries</h3>
+        <ul id="favorites-list"></ul>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js"></script>
+    <script>
+     const options = {
+  bottom: '64px', // default: '32px'
+  right: 'unset', // default: '32px'
+  left: '32px', // default: 'unset'
+  time: '0.5s', // default: '0.3s'
+  mixColor: '#fff', // default: '#fff'
+  backgroundColor: '#fff',  // default: '#fff'
+  buttonColorDark: '#100f2c',  // default: '#100f2c'
+  buttonColorLight: '#fff', // default: '#fff'
+  saveInCookies: false, // default: true,
+  label: '🌓', // default: ''
+  autoMatchOsTheme: true // default: true
+}
+
+const darkmode = new Darkmode(options);
+darkmode.showWidget();
+    </script>
+    <script src="Js/script.js"></script>
+</body>
+</html>
