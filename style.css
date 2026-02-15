@@ -113,8 +113,12 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .dm-friends { border: 1px solid var(--line); border-radius: 12px; padding: 8px; display: grid; gap: 6px; background: rgba(11,31,42,.9); align-content: start; }
 .dm-friend-item { width: 100%; text-align: left; background: rgba(55, 199, 232, .1); }
 .dm-friend-item.active { background: rgba(55, 199, 232, .35); }
-.dm-chat { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(11,31,42,.9); display: flex; flex-direction: column; gap: 8px; }
-.dm-thread { flex: 1; overflow: auto; }
+.dm-chat { border: 1px solid var(--line); border-radius: 16px; padding: 12px; background: linear-gradient(180deg, rgba(12,33,46,.95), rgba(10,27,38,.95)); display: flex; flex-direction: column; gap: 10px; box-shadow: inset 0 0 0 1px rgba(55,199,232,.08); }
+.dm-thread { flex: 1; overflow: auto; padding-right: 4px; }
+.dm-thread::-webkit-scrollbar { width: 8px; }
+.dm-thread::-webkit-scrollbar-thumb { background: rgba(55,199,232,.35); border-radius: 20px; }
+.message-bubble { border-radius: 14px; transition: transform .15s ease, border-color .15s ease; }
+.message-bubble:hover { transform: translateY(-1px); border-color: rgba(88,223,195,.65); }
 .message-bubble.mine { background: rgba(55,199,232,.2); }
 .dm-input-wrap { display: grid; gap: 8px; }
 
