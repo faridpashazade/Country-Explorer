@@ -11,10 +11,38 @@ const MAX_BODY_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
-const defaultDb = { users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {} };
+const defaultDb = { users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {}, forumTopics: [], forumPosts: [] };
 
-function ensureDb() { if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify(defaultDb, null, 2)); }
-function readDb() { ensureDb(); return JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); }
+function seedForumTopics(db) {
+  if (!db.forumTopics.length) {
+    db.forumTopics = [
+      { id: uid(), name: 'Blue Team Operations', description: 'SOC workflows, detections and incident response playbooks.' },
+      { id: uid(), name: 'OWASP & AppSec', description: 'Secure coding, threat modeling and web vulnerabilities.' },
+      { id: uid(), name: 'Cloud Security', description: 'Identity, IAM hardening, CSPM and secure architecture.' }
+    ];
+  }
+}
+function ensureDb() {
+  if (!fs.existsSync(DB_PATH)) {
+    const db = JSON.parse(JSON.stringify(defaultDb));
+    seedForumTopics(db);
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  }
+}
+function readDb() {
+  ensureDb();
+  const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+  let changed = false;
+  for (const key of Object.keys(defaultDb)) {
+    if (db[key] === undefined) {
+      db[key] = Array.isArray(defaultDb[key]) ? [] : {};
+      changed = true;
+    }
+  }
+  if (!db.forumTopics.length) { seedForumTopics(db); changed = true; }
+  if (changed) writeDb(db);
+  return db;
+}
 function writeDb(db) { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); }
 function uid() { return crypto.randomUUID(); }
 function now() { return new Date().toISOString(); }
@@ -207,6 +235,34 @@ async function handleApi(req, res, urlObj) {
       if (!content) return json(res, 400, { error: 'Content required' });
       post.comments.push({ id: uid(), userId: user.id, content, kind: body.kind === 'reply' ? 'reply' : 'comment', createdAt: now() });
       if (post.authorId !== user.id) notify(db, post.authorId, 'comment', `${user.username} replied to your post.`);
+      writeDb(db);
+      return json(res, 200, { ok: true });
+    }
+
+
+    if (req.method === 'GET' && pathname === '/api/forum/topics') {
+      return json(res, 200, { topics: db.forumTopics });
+    }
+
+    if (req.method === 'GET' && pathname.match(/^\/api\/forum\/topics\/[^/]+\/posts$/)) {
+      const topicId = pathname.split('/')[4];
+      const posts = db.forumPosts
+        .filter((p) => p.topicId === topicId)
+        .slice()
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((p) => ({ ...p, author: publicUser(db.users.find((u) => u.id === p.authorId)) }));
+      return json(res, 200, { posts });
+    }
+
+    if (req.method === 'POST' && pathname.match(/^\/api\/forum\/topics\/[^/]+\/posts$/)) {
+      const topicId = pathname.split('/')[4];
+      const body = await readBody(req);
+      const author = db.users.find((u) => u.id === body.userId);
+      const topic = db.forumTopics.find((t) => t.id === topicId);
+      const content = sanitize(body.content, 700);
+      if (!author || !topic) return json(res, 404, { error: 'Not found' });
+      if (!content) return json(res, 400, { error: 'Content required' });
+      db.forumPosts.push({ id: uid(), topicId, authorId: author.id, content, createdAt: now() });
       writeDb(db);
       return json(res, 200, { ok: true });
     }

@@ -65,6 +65,7 @@
         <button class="nav-btn" data-view="feed">Feed</button>
         <button class="nav-btn" data-view="network">Friends</button>
         <button class="nav-btn" data-view="messages">Messages</button>
+        <button class="nav-btn" data-view="forum">Forum</button>
         <button class="nav-btn" data-view="notifications">Notifications</button>
         <button class="nav-btn" data-view="settings">Settings</button>
       </nav>
@@ -78,6 +79,7 @@
             <button class="nav-btn active" data-view="feed">Feed</button>
             <button class="nav-btn" data-view="network">Friends</button>
             <button class="nav-btn" data-view="messages">Messages</button>
+        <button class="nav-btn" data-view="forum">Forum</button>
             <button class="nav-btn" data-view="notifications">Notifications</button>
             <button class="nav-btn" data-view="settings">Settings</button>
           </nav>
@@ -122,6 +124,23 @@
             <h3>Friend Requests</h3>
             <div id="friend-requests" class="stack"></div>
           </div>
+
+
+          <div id="forum-view" class="view hidden">
+            <h3>Community Forum 🧠</h3>
+            <div class="forum-layout">
+              <aside id="forum-topic-list" class="forum-topics"></aside>
+              <section class="forum-panel">
+                <div id="forum-topic-header" class="forum-header">Select a topic to join discussion.</div>
+                <form id="forum-post-form" class="stack hidden">
+                  <textarea id="forum-post-input" maxlength="700" placeholder="Write your forum opinion..."></textarea>
+                  <button type="submit">Share in topic</button>
+                </form>
+                <div id="forum-post-list" class="stack"></div>
+              </section>
+            </div>
+          </div>
+
 
           <div id="messages-view" class="view hidden">
             <h3>Messages ✉️</h3>

@@ -16,7 +16,10 @@ const state = {
   feedOffset: 0,
   feedLimit: 20,
   hasMorePosts: true,
-  loadingPosts: false
+  loadingPosts: false,
+  forumTopics: [],
+  forumPosts: [],
+  activeForumTopicId: ''
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -133,16 +136,19 @@ async function fetchPosts(reset = false) {
 
 async function fetchAppMeta() {
   const uid = state.user.id;
-  const [users, requests, friends, notifications] = await Promise.all([
+  const [users, requests, friends, notifications, forumTopics] = await Promise.all([
     api(`/api/users/search?userId=${encodeURIComponent(uid)}&q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`),
     api(`/api/friends/requests/${uid}`),
     api(`/api/friends/list/${uid}`),
-    api(`/api/notifications/${uid}`)
+    api(`/api/notifications/${uid}`),
+    api('/api/forum/topics')
   ]);
   state.users = users.users;
   state.requests = requests.requests;
   state.friends = friends.friends;
   state.notifications = notifications.notifications;
+  state.forumTopics = forumTopics.topics;
+  if (!state.activeForumTopicId && state.forumTopics[0]) state.activeForumTopicId = state.forumTopics[0].id;
 }
 
 function renderHeader() {
@@ -457,6 +463,50 @@ function renderNotifications() {
   });
 }
 
+
+function renderForumTopics() {
+  const wrap = el('forum-topic-list');
+  wrap.innerHTML = '';
+  state.forumTopics.forEach((t) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `forum-topic-btn ${state.activeForumTopicId === t.id ? 'active' : ''}`;
+    btn.innerHTML = `<strong>${t.name}</strong><span class="small">${t.description}</span>`;
+    btn.onclick = async () => {
+      state.activeForumTopicId = t.id;
+      await renderForumPosts();
+      renderForumTopics();
+    };
+    wrap.appendChild(btn);
+  });
+}
+
+async function renderForumPosts() {
+  const form = el('forum-post-form');
+  const header = el('forum-topic-header');
+  const list = el('forum-post-list');
+  list.innerHTML = '';
+
+  if (!state.activeForumTopicId) {
+    header.textContent = 'Select a topic to join discussion.';
+    form.classList.add('hidden');
+    return;
+  }
+
+  const topic = state.forumTopics.find((t) => t.id === state.activeForumTopicId);
+  header.innerHTML = `<strong>${topic?.name || 'Forum Topic'}</strong><p class="small">${topic?.description || ''}</p>`;
+  form.classList.remove('hidden');
+
+  const data = await api(`/api/forum/topics/${state.activeForumTopicId}/posts`);
+  state.forumPosts = data.posts;
+  state.forumPosts.forEach((post) => {
+    const item = document.createElement('article');
+    item.className = 'forum-post';
+    item.innerHTML = `<strong>${post.author?.username || 'User'}</strong><p class="small">${new Date(post.createdAt).toLocaleString()}</p><p>${post.content}</p>`;
+    list.appendChild(item);
+  });
+}
+
 function renderTopSearchResults() {
   const wrap = el('top-search-results');
   wrap.innerHTML = '';
@@ -513,6 +563,8 @@ async function renderApp(resetFeed = false) {
   renderFeed();
   renderNetwork();
   renderNotifications();
+  renderForumTopics();
+  await renderForumPosts();
   await renderMessages();
 }
 
@@ -630,6 +682,24 @@ el('message-form').addEventListener('submit', async (e) => {
     el('message-image-name').textContent = 'No file selected';
     el('message-image-name').classList.add('hidden');
     await renderMessages();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+
+el('forum-post-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    if (!state.activeForumTopicId) return;
+    const content = sanitize(el('forum-post-input').value, 700);
+    if (!content) return;
+    await api(`/api/forum/topics/${state.activeForumTopicId}/posts`, {
+      method: 'POST',
+      body: JSON.stringify({ userId: state.user.id, content })
+    });
+    e.target.reset();
+    await renderForumPosts();
   } catch (err) {
     alert(err.message);
   }
