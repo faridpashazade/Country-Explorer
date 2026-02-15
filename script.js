@@ -52,7 +52,7 @@ function render() {
   el('profile-name').textContent = user.username;
   el('profile-preview').src = user.profileImage || 'img.png';
   el('active-status').textContent = `Status: ${user.active ? 'Active 🟢' : 'Away ⚪'}`;
-  el('encrypted-status').textContent = `Encrypted status: ${user.statusEncrypted || hash('Blue team mode')}`;
+  el('status-text').textContent = `Status message: ${decrypt(user.statusEncrypted || hash('Blue team mode'))}`;
   renderNavView();
   renderFeed();
   renderNetwork();
