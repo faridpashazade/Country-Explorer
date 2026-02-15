@@ -107,11 +107,22 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .load-more-btn { margin: 10px auto 0; display: block; min-width: 180px; }
 .reply-wrap { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(88,223,195,.35); }
 .reply-wrap input { flex: 1; }
-.stack { display: grid; gap: 10px; }
-.post, .item, .message-bubble { border: 1px solid var(--line); border-radius: 12px; background: rgba(16,39,52,.9); padding: 12px; }
+
+#feed-view { max-width: 980px; margin: 0 auto; }
+#feed-view h3 { margin-top: 10px; }
+#post-list { gap: 14px; }
+.post {
+  padding: 18px;
+  border-radius: 16px;
+  line-height: 1.55;
+}
+.post strong { font-size: 1.02rem; color: #eafcff; }
+.post p { margin: 10px 0 12px; font-size: 1.02rem; color: #dcf4ff; }
+.stack { display: grid; gap: 14px; }
+.post, .item, .message-bubble { border: 1px solid var(--line); border-radius: 16px; background: rgba(16,39,52,.9); padding: 18px; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-.actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.comment { margin-top: 6px; padding: 8px; background: rgba(12, 30, 42, .95); border-radius: 8px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.comment { margin-top: 6px; padding: 10px; background: rgba(12, 30, 42, .95); border-radius: 8px; border: 1px solid rgba(88,223,195,.2); }
 .post-image, .message-image { max-width: 260px; border-radius: 10px; margin-top: 8px; display: block; }
 
 .dm-layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; min-height: 420px; }
