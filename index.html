@@ -47,6 +47,10 @@
           <h2>CyberConnect</h2>
           <p id="active-status">Status: Active</p>
         </div>
+        <div class="top-search-wrap">
+          <input id="top-search-user" type="text" placeholder="Search username..." autocomplete="off" />
+          <div id="top-search-results" class="search-results hidden"></div>
+        </div>
         <div class="topbar-actions">
           <button id="mobile-menu-toggle" class="mobile-only" aria-expanded="false" aria-controls="mobile-nav">☰ Menu</button>
           <button id="toggle-active-btn">Toggle Active</button>
@@ -78,12 +82,13 @@
 
         <section class="card content">
           <div id="feed-view" class="view">
+            <div id="selected-profile-card" class="item hidden"></div>
             <h3>Share a post</h3>
             <form id="post-form" class="inline-form">
               <textarea id="post-content" maxlength="500" placeholder="Write something cybersecurity related..." required></textarea>
               <button type="submit">Post</button>
             </form>
-            <h3>Community Feed</h3>
+            <h3 id="feed-title">Community Feed</h3>
             <div id="post-list" class="stack"></div>
           </div>
 
@@ -98,10 +103,12 @@
           <div id="messages-view" class="view hidden">
             <h3>Messaging</h3>
             <select id="message-target"></select>
-            <form id="message-form" class="inline-form">
-              <input id="message-input" maxlength="300" placeholder="Type a secure message" required />
+            <form id="message-form" class="inline-form message-form">
+              <input id="message-input" maxlength="300" placeholder="Type a secure message" />
+              <input id="message-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
               <button type="submit">Send</button>
             </form>
+            <p class="small">Only images allowed, max 2MB.</p>
             <div id="message-thread" class="stack"></div>
           </div>
 

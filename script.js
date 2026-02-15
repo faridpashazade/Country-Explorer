@@ -7,7 +7,9 @@ const state = {
   requests: [],
   friends: [],
   notifications: [],
-  messages: []
+  messages: [],
+  selectedProfile: null,
+  topSearchResults: []
 };
 
 const el = (id) => document.getElementById(id);
@@ -118,7 +120,72 @@ function renderHeader() {
   el('status-input').value = decode(state.user.statusEncrypted) || '';
 }
 
+async function sendFriendRequest(targetId) {
+  await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ from: state.user.id, to: targetId }) });
+  await renderApp();
+}
+
+async function openUserProfile(user) {
+  if (!user) return;
+  state.selectedProfile = user;
+  const { posts } = await api(`/api/users/${user.id}/posts?viewerId=${state.user.id}`);
+  state.posts = posts;
+  switchView('feed');
+  renderSelectedProfileCard();
+  renderFeed();
+}
+
+function renderSelectedProfileCard() {
+  const card = el('selected-profile-card');
+  if (!state.selectedProfile) {
+    card.classList.add('hidden');
+    return;
+  }
+
+  const user = state.selectedProfile;
+  const isFriend = state.friends.some((f) => f.id === user.id);
+  card.innerHTML = '';
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  const text = document.createElement('span');
+  text.textContent = `@${user.username} profile view • Posts: ${user.postCount || 0}`;
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  if (!isFriend) {
+    const addBtn = document.createElement('button');
+    addBtn.textContent = 'Add Friend';
+    addBtn.onclick = async () => sendFriendRequest(user.id);
+    actions.appendChild(addBtn);
+  } else {
+    const msgBtn = document.createElement('button');
+    msgBtn.textContent = 'Message';
+    msgBtn.onclick = () => {
+      switchView('messages');
+      el('message-target').value = user.id;
+      renderMessages();
+    };
+    actions.appendChild(msgBtn);
+  }
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'danger';
+  clearBtn.textContent = 'Back to all posts';
+  clearBtn.onclick = async () => {
+    state.selectedProfile = null;
+    await renderApp();
+  };
+  actions.appendChild(clearBtn);
+
+  row.append(text, actions);
+  card.appendChild(row);
+  card.classList.remove('hidden');
+}
+
 function renderFeed() {
+  el('feed-title').textContent = state.selectedProfile ? `Posts by @${state.selectedProfile.username}` : 'Community Feed';
   const wrap = el('post-list');
   wrap.innerHTML = '';
   state.posts.forEach((post) => {
@@ -138,6 +205,7 @@ function renderFeed() {
       await api(`/api/posts/${post.id}/like`, { method: 'POST', body: JSON.stringify({ userId: state.user.id }) });
       await renderApp();
     };
+
     const input = document.createElement('input');
     input.placeholder = 'Add comment';
     input.maxLength = 200;
@@ -169,17 +237,24 @@ function renderNetwork() {
     const item = document.createElement('div');
     item.className = 'item row';
     const isFriend = state.friends.some((f) => f.id === u.id);
-    const pending = state.requests.some((r) => r.from === u.id);
     const text = document.createElement('span');
     text.textContent = `${u.username} (${u.active ? 'active' : 'away'}) • Posts: ${u.postCount}`;
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const viewBtn = document.createElement('button');
+    viewBtn.textContent = 'View Posts';
+    viewBtn.onclick = () => openUserProfile(u);
+    actions.appendChild(viewBtn);
+
     const btn = document.createElement('button');
-    btn.textContent = isFriend ? 'Friends' : pending ? 'Requested/Incoming' : 'Add Friend';
-    btn.disabled = isFriend || pending;
-    btn.onclick = async () => {
-      await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ from: state.user.id, to: u.id }) });
-      await renderApp();
-    };
-    item.append(text, btn);
+    btn.textContent = isFriend ? 'Friends' : 'Add Friend';
+    btn.disabled = isFriend;
+    btn.onclick = async () => sendFriendRequest(u.id);
+    actions.appendChild(btn);
+
+    item.append(text, actions);
     result.appendChild(item);
   });
 
@@ -201,6 +276,7 @@ function renderNetwork() {
 
 async function renderMessages() {
   const select = el('message-target');
+  const prev = select.value;
   select.innerHTML = '';
   state.friends.forEach((f) => {
     const o = document.createElement('option');
@@ -208,16 +284,35 @@ async function renderMessages() {
     o.textContent = f.username;
     select.appendChild(o);
   });
+  if (prev && state.friends.some((f) => f.id === prev)) select.value = prev;
 
   const thread = el('message-thread');
   thread.innerHTML = '';
-  if (!select.value) { thread.textContent = 'You can message after becoming friends.'; return; }
+  if (!select.value) { thread.textContent = 'You can message only your friends.'; return; }
   const data = await api(`/api/messages/thread?userId=${state.user.id}&targetId=${select.value}`);
   state.messages = data.messages;
   state.messages.forEach((m) => {
     const b = document.createElement('div');
     b.className = 'message-bubble';
-    b.textContent = `${m.from === state.user.id ? 'Me' : 'Them'}: ${m.content}`;
+
+    const who = document.createElement('strong');
+    who.textContent = m.from === state.user.id ? 'Me' : 'Them';
+    b.appendChild(who);
+
+    if (m.content) {
+      const text = document.createElement('p');
+      text.textContent = m.content;
+      b.appendChild(text);
+    }
+
+    if (m.imageData) {
+      const img = document.createElement('img');
+      img.src = m.imageData;
+      img.alt = 'message attachment';
+      img.className = 'message-image';
+      b.appendChild(img);
+    }
+
     thread.appendChild(b);
   });
 }
@@ -233,12 +328,58 @@ function renderNotifications() {
   });
 }
 
+function renderTopSearchResults() {
+  const wrap = el('top-search-results');
+  wrap.innerHTML = '';
+  if (!state.topSearchResults.length) {
+    wrap.classList.add('hidden');
+    return;
+  }
+
+  state.topSearchResults.forEach((u) => {
+    const btn = document.createElement('button');
+    btn.className = 'search-result-item';
+    btn.type = 'button';
+    btn.textContent = `${u.username} • ${u.postCount} posts`;
+    btn.onclick = async () => {
+      el('top-search-user').value = '';
+      state.topSearchResults = [];
+      renderTopSearchResults();
+      await openUserProfile(u);
+    };
+    wrap.appendChild(btn);
+  });
+  wrap.classList.remove('hidden');
+}
+
+async function onTopSearchInput() {
+  const q = sanitize(el('top-search-user').value, 30);
+  if (q.length < 1) {
+    state.topSearchResults = [];
+    renderTopSearchResults();
+    return;
+  }
+  const data = await api(`/api/users/search?userId=${encodeURIComponent(state.user.id)}&q=${encodeURIComponent(q)}`);
+  state.topSearchResults = data.users.slice(0, 8);
+  renderTopSearchResults();
+}
+
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function renderApp() {
   if (!state.user) return toggleAuth(false);
   toggleAuth(true);
   await fetchAppData();
   renderHeader();
   switchView(state.view);
+  renderSelectedProfileCard();
   renderFeed();
   renderNetwork();
   renderNotifications();
@@ -281,6 +422,13 @@ if (mobileMenuBtn) {
 }
 
 el('search-user').addEventListener('input', renderApp);
+el('top-search-user').addEventListener('input', onTopSearchInput);
+document.addEventListener('click', (event) => {
+  if (!el('top-search-results').contains(event.target) && event.target !== el('top-search-user')) {
+    state.topSearchResults = [];
+    renderTopSearchResults();
+  }
+});
 el('message-target').addEventListener('change', renderMessages);
 
 el('post-form').addEventListener('submit', async (e) => {
@@ -294,12 +442,26 @@ el('post-form').addEventListener('submit', async (e) => {
 
 el('message-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const to = el('message-target').value;
-  const content = sanitize(el('message-input').value, 300);
-  if (!to || !content) return;
-  await api('/api/messages', { method: 'POST', body: JSON.stringify({ from: state.user.id, to, content }) });
-  e.target.reset();
-  await renderApp();
+  try {
+    const to = el('message-target').value;
+    const content = sanitize(el('message-input').value, 300);
+    const file = el('message-image').files[0];
+    let imageData = '';
+
+    if (file) {
+      const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+      if (!allowed.includes(file.type)) throw new Error('Only image files are allowed.');
+      if (file.size > 2 * 1024 * 1024) throw new Error('Image must be less than 2MB.');
+      imageData = await fileToDataUrl(file);
+    }
+
+    if (!to || (!content && !imageData)) return;
+    await api('/api/messages', { method: 'POST', body: JSON.stringify({ from: state.user.id, to, content, imageData }) });
+    e.target.reset();
+    await renderApp();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
 el('settings-form').addEventListener('submit', async (e) => {
