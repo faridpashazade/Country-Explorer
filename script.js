@@ -752,7 +752,7 @@ el('forum-post-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
     if (!state.activeForumTopicId) return;
-    const content = sanitize(el('forum-post-input').value, 700);
+    const content = sanitize(el('forum-post-input').value, 3000);
     if (!content) return;
     await api(`/api/forum/topics/${state.activeForumTopicId}/posts`, {
       method: 'POST',

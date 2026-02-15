@@ -268,7 +268,7 @@ async function handleApi(req, res, urlObj) {
       const body = await readBody(req);
       const author = db.users.find((u) => u.id === body.userId);
       const topic = db.forumTopics.find((t) => t.id === topicId);
-      const content = sanitize(body.content, 700);
+      const content = sanitize(body.content, 3000);
       if (!author || !topic) return json(res, 404, { error: 'Not found' });
       if (!content) return json(res, 400, { error: 'Content required' });
       db.forumPosts.push({ id: uid(), topicId, authorId: author.id, content, comments: [], createdAt: now() });

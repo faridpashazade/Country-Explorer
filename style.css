@@ -138,8 +138,9 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .forum-topic-btn.active { background: rgba(55,199,232,.35); }
 .forum-panel { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: rgba(12,33,46,.88); display: grid; gap: 10px; }
 .forum-header { padding: 10px; border: 1px dashed rgba(88,223,195,.35); border-radius: 10px; }
-.forum-post { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: rgba(10,28,40,.9); }
-#forum-post-input { min-height: 90px; }
+.forum-post { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: rgba(10,28,40,.9); }
+.forum-post p { white-space: pre-wrap; word-break: break-word; line-height: 1.6; }
+#forum-post-input { min-height: 140px; }
 .dm-layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; min-height: 420px; }
 .dm-friends { border: 1px solid var(--line); border-radius: 12px; padding: 8px; display: grid; gap: 6px; background: rgba(11,31,42,.9); align-content: start; }
 .dm-friend-item { width: 100%; text-align: left; background: rgba(55, 199, 232, .1); }
