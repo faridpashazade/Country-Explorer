@@ -88,6 +88,19 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .post-tools { align-items: center; }
 .emoji-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .emoji-btn { padding: 8px 10px; background: rgba(88, 223, 195, .16); }
+.file-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #1ea9d2, #37c7e8);
+  color: #eaffff;
+  font-weight: 600;
+}
+.file-upload-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.visually-hidden { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.file-name { min-width: 140px; }
 
 .stack { display: grid; gap: 10px; }
 .post, .item, .message-bubble { border: 1px solid var(--line); border-radius: 12px; background: rgba(16,39,52,.9); padding: 12px; }

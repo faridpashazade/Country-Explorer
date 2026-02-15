@@ -96,7 +96,9 @@
             <form id="post-form" class="post-form-modern">
               <textarea id="post-content" maxlength="500" placeholder="Share your idea..." required></textarea>
               <div class="row post-tools">
-                <input id="post-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <label for="post-image" class="file-upload-btn">🚩 Choose file</label>
+                <input id="post-image" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <span id="post-image-name" class="small file-name">No file selected</span>
                 <div class="emoji-bar" data-target="post-content">
                   <button type="button" class="emoji-btn">😀</button>
                   <button type="button" class="emoji-btn">🔥</button>

@@ -95,6 +95,7 @@ async function loginUser(e) {
     state.user = data.user;
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
     e.target.reset();
+    el('post-image-name').textContent = 'No file selected';
     await renderApp();
   } catch (err) {
     setAuthMsg(err.message, true);
@@ -439,6 +440,10 @@ el('mobile-menu-toggle').addEventListener('click', () => {
 
 el('search-user').addEventListener('input', renderApp);
 el('top-search-user').addEventListener('input', onTopSearchInput);
+el('post-image').addEventListener('change', () => {
+  const file = el('post-image').files[0];
+  el('post-image-name').textContent = file ? file.name : 'No file selected';
+});
 document.addEventListener('click', (event) => {
   if (!el('top-search-results').contains(event.target) && event.target !== el('top-search-user')) {
     state.topSearchResults = [];
@@ -456,6 +461,7 @@ el('post-form').addEventListener('submit', async (e) => {
     if (!content && !imageData) return;
     await api('/api/posts', { method: 'POST', body: JSON.stringify({ userId: state.user.id, content, imageData }) });
     e.target.reset();
+    el('post-image-name').textContent = 'No file selected';
     await renderApp();
   } catch (err) {
     alert(err.message);
@@ -500,6 +506,7 @@ el('settings-form').addEventListener('submit', async (e) => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
     el('settings-message').textContent = 'Settings saved.';
     e.target.reset();
+    el('post-image-name').textContent = 'No file selected';
     await renderApp();
   } catch (err) {
     el('settings-message').textContent = err.message;
