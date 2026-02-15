@@ -66,6 +66,12 @@ function switchView(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   el(`${view}-view`).classList.remove('hidden');
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  const mobileNav = el('mobile-nav');
+  const menuBtn = el('mobile-menu-toggle');
+  if (mobileNav && menuBtn && window.innerWidth <= 900) {
+    mobileNav.classList.add('hidden');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
 }
 function renderNavView() { switchView(state.view); }
 
@@ -293,6 +299,16 @@ el('toggle-active-btn').addEventListener('click', () => {
 });
 
 document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+const mobileMenuBtn = el('mobile-menu-toggle');
+if (mobileMenuBtn) {
+  mobileMenuBtn.addEventListener('click', () => {
+    const mobileNav = el('mobile-nav');
+    if (!mobileNav) return;
+    const willShow = mobileNav.classList.contains('hidden');
+    mobileNav.classList.toggle('hidden', !willShow);
+    mobileMenuBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+  });
+}
 el('search-user').addEventListener('input', renderNetwork);
 
 el('post-form').addEventListener('submit', (e) => {

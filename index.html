@@ -48,10 +48,19 @@
           <p id="active-status">Status: Active</p>
         </div>
         <div class="topbar-actions">
+          <button id="mobile-menu-toggle" class="mobile-only" aria-expanded="false" aria-controls="mobile-nav">☰ Menu</button>
           <button id="toggle-active-btn">Toggle Active</button>
           <button id="logout-btn" class="danger">Logout</button>
         </div>
       </header>
+
+      <nav id="mobile-nav" class="card mobile-nav hidden">
+        <button class="nav-btn" data-view="feed">Feed</button>
+        <button class="nav-btn" data-view="network">Friends</button>
+        <button class="nav-btn" data-view="messages">Messages</button>
+        <button class="nav-btn" data-view="notifications">Notifications</button>
+        <button class="nav-btn" data-view="settings">Settings</button>
+      </nav>
 
       <div class="grid">
         <aside class="card sidebar">
