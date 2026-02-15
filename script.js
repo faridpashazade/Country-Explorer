@@ -122,7 +122,6 @@ async function fetchAppData() {
   state.requests = requests.requests;
   state.friends = friends.friends;
   state.notifications = notifications.notifications;
-  if (!state.activeChatFriendId && state.friends[0]) state.activeChatFriendId = state.friends[0].id;
 }
 
 function renderHeader() {
@@ -310,11 +309,22 @@ function renderDmFriendList() {
 async function renderMessages() {
   renderDmFriendList();
   const thread = el('message-thread');
+  const form = el('message-form');
+  const empty = el('dm-empty-state');
+  const imageName = el('message-image-name');
+
   thread.innerHTML = '';
   if (!state.activeChatFriendId) {
-    thread.textContent = 'You can message only your friends.';
+    empty.classList.remove('hidden');
+    thread.classList.add('hidden');
+    form.classList.add('hidden');
+    imageName.classList.add('hidden');
     return;
   }
+
+  empty.classList.add('hidden');
+  thread.classList.remove('hidden');
+  form.classList.remove('hidden');
 
   const data = await api(`/api/messages/thread?userId=${state.user.id}&targetId=${state.activeChatFriendId}`);
   state.messages = data.messages;
@@ -447,13 +457,20 @@ el('mobile-menu-toggle').addEventListener('click', () => {
 
 el('search-user').addEventListener('input', renderApp);
 el('top-search-user').addEventListener('input', onTopSearchInput);
+el('message-emoji').addEventListener('click', () => {
+  const input = el('message-input');
+  input.value = `${input.value}😀`;
+  input.focus();
+});
 el('post-image').addEventListener('change', () => {
   const file = el('post-image').files[0];
   el('post-image-name').textContent = file ? file.name : 'No file selected';
 });
 el('message-image').addEventListener('change', () => {
   const file = el('message-image').files[0];
-  el('message-image-name').textContent = file ? file.name : 'No file selected';
+  const label = el('message-image-name');
+  label.textContent = file ? file.name : 'No file selected';
+  label.classList.toggle('hidden', !file);
 });
 el('profile-image-file').addEventListener('change', () => {
   const file = el('profile-image-file').files[0];
@@ -497,6 +514,7 @@ el('message-form').addEventListener('submit', async (e) => {
     });
     e.target.reset();
     el('message-image-name').textContent = 'No file selected';
+    el('message-image-name').classList.add('hidden');
     await renderMessages();
   } catch (err) {
     alert(err.message);

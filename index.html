@@ -126,20 +126,16 @@
             <div class="dm-layout">
               <aside id="dm-friend-list" class="dm-friends"></aside>
               <section class="dm-chat">
-                <div id="message-thread" class="stack dm-thread"></div>
-                <form id="message-form" class="dm-input-wrap">
-                  <input id="message-input" maxlength="300" placeholder="Write message..." />
-                  <label for="message-image" class="file-upload-btn">🚩 Add image</label>
+                <div id="dm-empty-state" class="dm-empty">Click a username to open chat.</div>
+                <div id="message-thread" class="stack dm-thread hidden"></div>
+                <form id="message-form" class="dm-composer hidden">
+                  <input id="message-input" maxlength="300" placeholder="Message..." />
+                  <button type="button" id="message-emoji" class="icon-btn" title="Emoji">😀</button>
+                  <label for="message-image" class="icon-btn flag-btn" title="Upload image">🚩</label>
                   <input id="message-image" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-                  <span id="message-image-name" class="small file-name">No file selected</span>
-                  <div class="emoji-bar" data-target="message-input">
-                    <button type="button" class="emoji-btn">😀</button>
-                    <button type="button" class="emoji-btn">😂</button>
-                    <button type="button" class="emoji-btn">💙</button>
-                    <button type="button" class="emoji-btn">🚀</button>
-                  </div>
-                  <button type="submit">Send</button>
+                  <button type="submit" class="icon-btn send-btn" title="Send">➤</button>
                 </form>
+                <span id="message-image-name" class="small file-name hidden">No file selected</span>
                 <p class="small">Only friend chat. Image upload only, max 2MB.</p>
               </section>
             </div>
