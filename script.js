@@ -1,4 +1,6 @@
-const SESSION_KEY = 'cyberconnect_session_v2';
+const SESSION_KEY = 'cypherax_session_v3';
+const DEFAULT_AVATAR = 'default-avatar.svg';
+
 const state = {
   user: JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'),
   view: 'feed',
@@ -9,18 +11,18 @@ const state = {
   notifications: [],
   messages: [],
   selectedProfile: null,
-  topSearchResults: []
+  topSearchResults: [],
+  activeChatFriendId: ''
 };
+
+const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
 
 const el = (id) => document.getElementById(id);
 const decode = (txt) => { try { return atob(txt || ''); } catch { return ''; } };
 const sanitize = (txt, max = 500) => String(txt || '').replace(/[<>]/g, '').trim().slice(0, max);
 
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
+  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -42,12 +44,26 @@ function switchView(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   el(`${view}-view`).classList.remove('hidden');
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
-  const mobileNav = el('mobile-nav');
-  const menuBtn = el('mobile-menu-toggle');
-  if (mobileNav && menuBtn && window.innerWidth <= 900) {
-    mobileNav.classList.add('hidden');
-    menuBtn.setAttribute('aria-expanded', 'false');
+  if (window.innerWidth <= 900) {
+    el('mobile-nav').classList.add('hidden');
+    el('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
   }
+}
+
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function ensureSafeImageFile(file) {
+  if (!file) return;
+  const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  if (!allowed.includes(file.type)) throw new Error('Only image upload is allowed.');
+  if (file.size > 2 * 1024 * 1024) throw new Error('Image must be less than 2MB.');
 }
 
 async function registerUser(e) {
@@ -74,14 +90,10 @@ async function loginUser(e) {
   try {
     const data = await api('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({
-        email: sanitize(el('login-email').value, 120),
-        password: el('login-password').value
-      })
+      body: JSON.stringify({ email: sanitize(el('login-email').value, 120), password: el('login-password').value })
     });
     state.user = data.user;
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
-    setAuthMsg('');
     e.target.reset();
     await renderApp();
   } catch (err) {
@@ -99,7 +111,7 @@ async function fetchAppData() {
   const uid = state.user.id;
   const [posts, users, requests, friends, notifications] = await Promise.all([
     api('/api/posts'),
-    api(`/api/users/search?userId=${encodeURIComponent(uid)}&q=${encodeURIComponent(sanitize(el('search-user')?.value || '', 30))}`),
+    api(`/api/users/search?userId=${encodeURIComponent(uid)}&q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`),
     api(`/api/friends/requests/${uid}`),
     api(`/api/friends/list/${uid}`),
     api(`/api/notifications/${uid}`)
@@ -109,15 +121,32 @@ async function fetchAppData() {
   state.requests = requests.requests;
   state.friends = friends.friends;
   state.notifications = notifications.notifications;
+  if (!state.activeChatFriendId && state.friends[0]) state.activeChatFriendId = state.friends[0].id;
 }
 
 function renderHeader() {
   el('profile-name').textContent = state.user.username;
-  el('profile-preview').src = state.user.profileImage || 'img.png';
+  el('profile-preview').src = state.user.profileImage || DEFAULT_AVATAR;
   el('active-status').textContent = `Status: ${state.user.active ? 'Active 🟢' : 'Away ⚪'}`;
   el('status-text').textContent = `Status message: ${decode(state.user.statusEncrypted) || 'Blue team mode'}`;
-  el('profile-image-input').value = state.user.profileImage || '';
   el('status-input').value = decode(state.user.statusEncrypted) || '';
+}
+
+function renderTopics() {
+  const wrap = el('topic-list');
+  wrap.innerHTML = '';
+  TOPICS.forEach((topic) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'topic-chip';
+    chip.textContent = `#${topic}`;
+    chip.onclick = () => {
+      const area = el('post-content');
+      area.value = `${area.value} #${topic.replace(/\s+/g, '')}`.trim();
+      area.focus();
+    };
+    wrap.appendChild(chip);
+  });
 }
 
 async function sendFriendRequest(targetId) {
@@ -137,51 +166,34 @@ async function openUserProfile(user) {
 
 function renderSelectedProfileCard() {
   const card = el('selected-profile-card');
-  if (!state.selectedProfile) {
-    card.classList.add('hidden');
-    return;
-  }
-
+  if (!state.selectedProfile) return card.classList.add('hidden');
   const user = state.selectedProfile;
   const isFriend = state.friends.some((f) => f.id === user.id);
-  card.innerHTML = '';
-
-  const row = document.createElement('div');
-  row.className = 'row';
-  const text = document.createElement('span');
-  text.textContent = `@${user.username} profile view • Posts: ${user.postCount || 0}`;
-
-  const actions = document.createElement('div');
-  actions.className = 'actions';
+  card.classList.remove('hidden');
+  card.innerHTML = `<div class="row"><span>@${user.username} profile view</span><div class="actions"></div></div>`;
+  const actions = card.querySelector('.actions');
 
   if (!isFriend) {
     const addBtn = document.createElement('button');
     addBtn.textContent = 'Add Friend';
-    addBtn.onclick = async () => sendFriendRequest(user.id);
+    addBtn.onclick = () => sendFriendRequest(user.id);
     actions.appendChild(addBtn);
   } else {
     const msgBtn = document.createElement('button');
-    msgBtn.textContent = 'Message';
-    msgBtn.onclick = () => {
+    msgBtn.textContent = 'Message ✉️';
+    msgBtn.onclick = async () => {
+      state.activeChatFriendId = user.id;
       switchView('messages');
-      el('message-target').value = user.id;
-      renderMessages();
+      await renderMessages();
     };
     actions.appendChild(msgBtn);
   }
 
   const clearBtn = document.createElement('button');
   clearBtn.className = 'danger';
-  clearBtn.textContent = 'Back to all posts';
-  clearBtn.onclick = async () => {
-    state.selectedProfile = null;
-    await renderApp();
-  };
+  clearBtn.textContent = 'Back';
+  clearBtn.onclick = async () => { state.selectedProfile = null; await renderApp(); };
   actions.appendChild(clearBtn);
-
-  row.append(text, actions);
-  card.appendChild(row);
-  card.classList.remove('hidden');
 }
 
 function renderFeed() {
@@ -195,19 +207,26 @@ function renderFeed() {
     title.textContent = `${post.author?.username || 'Unknown'} • ${new Date(post.createdAt).toLocaleString()}`;
     const p = document.createElement('p');
     p.textContent = post.content;
+    postEl.append(title, p);
+
+    if (post.imageData) {
+      const postImg = document.createElement('img');
+      postImg.src = post.imageData;
+      postImg.className = 'post-image';
+      postEl.appendChild(postImg);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'actions';
-    const liked = post.likes.includes(state.user.id);
     const likeBtn = document.createElement('button');
+    const liked = post.likes.includes(state.user.id);
     likeBtn.textContent = `${liked ? 'Unlike' : 'Like'} (${post.likes.length})`;
     likeBtn.onclick = async () => {
       await api(`/api/posts/${post.id}/like`, { method: 'POST', body: JSON.stringify({ userId: state.user.id }) });
       await renderApp();
     };
-
     const input = document.createElement('input');
-    input.placeholder = 'Add comment';
+    input.placeholder = 'Comment...';
     input.maxLength = 200;
     const cBtn = document.createElement('button');
     cBtn.textContent = 'Comment';
@@ -218,8 +237,8 @@ function renderFeed() {
       await renderApp();
     };
     actions.append(likeBtn, input, cBtn);
+    postEl.appendChild(actions);
 
-    postEl.append(title, p, actions);
     post.comments.forEach((c) => {
       const ce = document.createElement('div');
       ce.className = 'comment';
@@ -237,11 +256,8 @@ function renderNetwork() {
     const item = document.createElement('div');
     item.className = 'item row';
     const isFriend = state.friends.some((f) => f.id === u.id);
-    const text = document.createElement('span');
-    text.textContent = `${u.username} (${u.active ? 'active' : 'away'}) • Posts: ${u.postCount}`;
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
+    item.innerHTML = `<span>${u.username} (${u.active ? 'active' : 'away'}) • Posts: ${u.postCount}</span><div class="actions"></div>`;
+    const actions = item.querySelector('.actions');
 
     const viewBtn = document.createElement('button');
     viewBtn.textContent = 'View Posts';
@@ -251,10 +267,9 @@ function renderNetwork() {
     const btn = document.createElement('button');
     btn.textContent = isFriend ? 'Friends' : 'Add Friend';
     btn.disabled = isFriend;
-    btn.onclick = async () => sendFriendRequest(u.id);
+    btn.onclick = () => sendFriendRequest(u.id);
     actions.appendChild(btn);
 
-    item.append(text, actions);
     result.appendChild(item);
   });
 
@@ -274,46 +289,51 @@ function renderNetwork() {
   });
 }
 
-async function renderMessages() {
-  const select = el('message-target');
-  const prev = select.value;
-  select.innerHTML = '';
+function renderDmFriendList() {
+  const wrap = el('dm-friend-list');
+  wrap.innerHTML = '';
+  if (!state.friends.length) {
+    wrap.textContent = 'No friends yet.';
+    return;
+  }
   state.friends.forEach((f) => {
-    const o = document.createElement('option');
-    o.value = f.id;
-    o.textContent = f.username;
-    select.appendChild(o);
+    const btn = document.createElement('button');
+    btn.className = `dm-friend-item ${state.activeChatFriendId === f.id ? 'active' : ''}`;
+    btn.type = 'button';
+    btn.textContent = `@${f.username}`;
+    btn.onclick = async () => { state.activeChatFriendId = f.id; await renderMessages(); };
+    wrap.appendChild(btn);
   });
-  if (prev && state.friends.some((f) => f.id === prev)) select.value = prev;
+}
 
+async function renderMessages() {
+  renderDmFriendList();
   const thread = el('message-thread');
   thread.innerHTML = '';
-  if (!select.value) { thread.textContent = 'You can message only your friends.'; return; }
-  const data = await api(`/api/messages/thread?userId=${state.user.id}&targetId=${select.value}`);
+  if (!state.activeChatFriendId) {
+    thread.textContent = 'You can message only your friends.';
+    return;
+  }
+
+  const data = await api(`/api/messages/thread?userId=${state.user.id}&targetId=${state.activeChatFriendId}`);
   state.messages = data.messages;
   state.messages.forEach((m) => {
-    const b = document.createElement('div');
-    b.className = 'message-bubble';
-
-    const who = document.createElement('strong');
-    who.textContent = m.from === state.user.id ? 'Me' : 'Them';
-    b.appendChild(who);
-
+    const bubble = document.createElement('div');
+    bubble.className = `message-bubble ${m.from === state.user.id ? 'mine' : ''}`;
+    bubble.innerHTML = `<strong>${m.from === state.user.id ? 'Me' : 'Friend'}</strong>`;
     if (m.content) {
       const text = document.createElement('p');
       text.textContent = m.content;
-      b.appendChild(text);
+      bubble.appendChild(text);
     }
-
     if (m.imageData) {
       const img = document.createElement('img');
       img.src = m.imageData;
       img.alt = 'message attachment';
       img.className = 'message-image';
-      b.appendChild(img);
+      bubble.appendChild(img);
     }
-
-    thread.appendChild(b);
+    thread.appendChild(bubble);
   });
 }
 
@@ -331,10 +351,7 @@ function renderNotifications() {
 function renderTopSearchResults() {
   const wrap = el('top-search-results');
   wrap.innerHTML = '';
-  if (!state.topSearchResults.length) {
-    wrap.classList.add('hidden');
-    return;
-  }
+  if (!state.topSearchResults.length) return wrap.classList.add('hidden');
 
   state.topSearchResults.forEach((u) => {
     const btn = document.createElement('button');
@@ -354,22 +371,24 @@ function renderTopSearchResults() {
 
 async function onTopSearchInput() {
   const q = sanitize(el('top-search-user').value, 30);
-  if (q.length < 1) {
+  if (!q) {
     state.topSearchResults = [];
-    renderTopSearchResults();
-    return;
+    return renderTopSearchResults();
   }
   const data = await api(`/api/users/search?userId=${encodeURIComponent(state.user.id)}&q=${encodeURIComponent(q)}`);
   state.topSearchResults = data.users.slice(0, 8);
   renderTopSearchResults();
 }
 
-async function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('File read failed'));
-    reader.readAsDataURL(file);
+function connectEmojiButtons() {
+  document.querySelectorAll('.emoji-bar').forEach((bar) => {
+    const target = el(bar.dataset.target);
+    bar.querySelectorAll('.emoji-btn').forEach((btn) => {
+      btn.onclick = () => {
+        target.value = `${target.value}${btn.textContent}`;
+        target.focus();
+      };
+    });
   });
 }
 
@@ -378,6 +397,7 @@ async function renderApp() {
   toggleAuth(true);
   await fetchAppData();
   renderHeader();
+  renderTopics();
   switchView(state.view);
   renderSelectedProfileCard();
   renderFeed();
@@ -386,7 +406,6 @@ async function renderApp() {
   await renderMessages();
 }
 
-// events
 document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('[data-auth-tab]').forEach((b) => b.classList.remove('active'));
@@ -401,25 +420,22 @@ document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
 el('register-form').addEventListener('submit', registerUser);
 el('login-form').addEventListener('submit', loginUser);
 el('logout-btn').addEventListener('click', logout);
+el('open-messages-btn').addEventListener('click', async () => { switchView('messages'); await renderMessages(); });
 
 el('toggle-active-btn').addEventListener('click', async () => {
-  const active = !state.user.active;
-  const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active }) });
+  const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !state.user.active }) });
   state.user = data.user;
   localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
   await renderApp();
 });
 
 document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
-const mobileMenuBtn = el('mobile-menu-toggle');
-if (mobileMenuBtn) {
-  mobileMenuBtn.addEventListener('click', () => {
-    const mobileNav = el('mobile-nav');
-    const willShow = mobileNav.classList.contains('hidden');
-    mobileNav.classList.toggle('hidden', !willShow);
-    mobileMenuBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
-  });
-}
+el('mobile-menu-toggle').addEventListener('click', () => {
+  const mobileNav = el('mobile-nav');
+  const willShow = mobileNav.classList.contains('hidden');
+  mobileNav.classList.toggle('hidden', !willShow);
+  el('mobile-menu-toggle').setAttribute('aria-expanded', willShow ? 'true' : 'false');
+});
 
 el('search-user').addEventListener('input', renderApp);
 el('top-search-user').addEventListener('input', onTopSearchInput);
@@ -429,36 +445,37 @@ document.addEventListener('click', (event) => {
     renderTopSearchResults();
   }
 });
-el('message-target').addEventListener('change', renderMessages);
 
 el('post-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const content = sanitize(el('post-content').value, 500);
-  if (!content) return;
-  await api('/api/posts', { method: 'POST', body: JSON.stringify({ userId: state.user.id, content }) });
-  e.target.reset();
-  await renderApp();
+  try {
+    const content = sanitize(el('post-content').value, 500);
+    const file = el('post-image').files[0];
+    ensureSafeImageFile(file);
+    const imageData = file ? await fileToDataUrl(file) : '';
+    if (!content && !imageData) return;
+    await api('/api/posts', { method: 'POST', body: JSON.stringify({ userId: state.user.id, content, imageData }) });
+    e.target.reset();
+    await renderApp();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
 el('message-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const to = el('message-target').value;
     const content = sanitize(el('message-input').value, 300);
     const file = el('message-image').files[0];
-    let imageData = '';
-
-    if (file) {
-      const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-      if (!allowed.includes(file.type)) throw new Error('Only image files are allowed.');
-      if (file.size > 2 * 1024 * 1024) throw new Error('Image must be less than 2MB.');
-      imageData = await fileToDataUrl(file);
-    }
-
-    if (!to || (!content && !imageData)) return;
-    await api('/api/messages', { method: 'POST', body: JSON.stringify({ from: state.user.id, to, content, imageData }) });
+    ensureSafeImageFile(file);
+    const imageData = file ? await fileToDataUrl(file) : '';
+    if (!state.activeChatFriendId || (!content && !imageData)) return;
+    await api('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({ from: state.user.id, to: state.activeChatFriendId, content, imageData })
+    });
     e.target.reset();
-    await renderApp();
+    await renderMessages();
   } catch (err) {
     alert(err.message);
   }
@@ -467,10 +484,13 @@ el('message-form').addEventListener('submit', async (e) => {
 el('settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
+    const file = el('profile-image-file').files[0];
+    ensureSafeImageFile(file);
+    const profileImage = file ? await fileToDataUrl(file) : '';
     const data = await api(`/api/settings/${state.user.id}`, {
       method: 'PUT',
       body: JSON.stringify({
-        profileImage: sanitize(el('profile-image-input').value, 250),
+        profileImage,
         status: sanitize(el('status-input').value, 120),
         newPassword: el('new-password').value,
         newEmail: sanitize(el('new-email').value, 120)
@@ -486,4 +506,5 @@ el('settings-form').addEventListener('submit', async (e) => {
   }
 });
 
+connectEmojiButtons();
 renderApp();

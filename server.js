@@ -11,37 +11,19 @@ const MAX_BODY_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
-const defaultDb = {
-  users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {}
-};
+const defaultDb = { users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {} };
 
-function ensureDb() {
-  if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify(defaultDb, null, 2));
-}
+function ensureDb() { if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify(defaultDb, null, 2)); }
 function readDb() { ensureDb(); return JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); }
 function writeDb(db) { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); }
 function uid() { return crypto.randomUUID(); }
 function now() { return new Date().toISOString(); }
 function hash(txt) { return crypto.createHash('sha256').update(String(txt)).digest('hex'); }
 function sanitize(txt, max = 500) { return String(txt || '').replace(/[<>]/g, '').trim().slice(0, max); }
-function publicUser(u = {}) {
-  return {
-    id: u.id,
-    username: u.username,
-    email: u.email,
-    emailChanged: u.emailChanged,
-    profileImage: u.profileImage,
-    active: u.active,
-    statusEncrypted: u.statusEncrypted,
-    createdAt: u.createdAt
-  };
-}
-function notify(db, userId, type, text) {
-  db.notifications.unshift({ id: uid(), userId, type, text: sanitize(text, 200), createdAt: now() });
-}
-function areFriends(db, a, b) {
-  return db.friendships.some((f) => (f.a === a && f.b === b) || (f.a === b && f.b === a));
-}
+function publicUser(u = {}) { return { id: u.id, username: u.username, email: u.email, emailChanged: u.emailChanged, profileImage: u.profileImage, active: u.active, statusEncrypted: u.statusEncrypted, createdAt: u.createdAt }; }
+function notify(db, userId, type, text) { db.notifications.unshift({ id: uid(), userId, type, text: sanitize(text, 200), createdAt: now() }); }
+function areFriends(db, a, b) { return db.friendships.some((f) => (f.a === a && f.b === b) || (f.a === b && f.b === a)); }
+
 function validateImageDataUrl(imageData) {
   if (!imageData) return '';
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(imageData);
@@ -60,17 +42,10 @@ function json(res, status, payload) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => {
-      data += c;
-      if (data.length > MAX_BODY_BYTES) req.destroy();
-    });
+    req.on('data', (c) => { data += c; if (data.length > MAX_BODY_BYTES) req.destroy(); });
     req.on('end', () => {
       if (!data) return resolve({});
-      try {
-        resolve(JSON.parse(data));
-      } catch {
-        reject(new Error('Invalid JSON'));
-      }
+      try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON')); }
     });
     req.on('error', reject);
   });
@@ -81,9 +56,17 @@ function serveStatic(req, res, pathname) {
   if (!filePath.startsWith(ROOT)) return json(res, 403, { error: 'Forbidden' });
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) filePath = path.join(ROOT, 'index.html');
   const ext = path.extname(filePath).toLowerCase();
-  const type = ext === '.html' ? 'text/html' : ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : ext === '.png' ? 'image/png' : 'application/octet-stream';
+  const type = ext === '.html' ? 'text/html' : ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : ext === '.png' ? 'image/png' : ext === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
   res.writeHead(200, { 'Content-Type': type });
   fs.createReadStream(filePath).pipe(res);
+}
+
+function withUsers(db, posts) {
+  return posts.map((p) => ({
+    ...p,
+    author: publicUser(db.users.find((u) => u.id === p.authorId)),
+    comments: p.comments.map((c) => ({ ...c, user: publicUser(db.users.find((u) => u.id === c.userId)) }))
+  }));
 }
 
 async function handleApi(req, res, urlObj) {
@@ -96,24 +79,12 @@ async function handleApi(req, res, urlObj) {
       const username = sanitize(body.username, 20);
       const email = sanitize(body.email, 120).toLowerCase();
       const password = String(body.password || '');
-
       if (!/^[\w.-]{3,20}$/.test(username)) return json(res, 400, { error: 'Username invalid' });
       if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { error: 'Email invalid' });
       if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) return json(res, 400, { error: 'Password policy failed' });
       if (db.users.some((u) => u.email === email)) return json(res, 409, { error: 'Email already exists' });
       if (db.users.some((u) => u.username.toLowerCase() === username.toLowerCase())) return json(res, 409, { error: 'Username already exists' });
-
-      db.users.push({
-        id: uid(),
-        username,
-        email,
-        passwordHash: hash(password),
-        emailChanged: 0,
-        profileImage: '',
-        active: true,
-        statusEncrypted: Buffer.from('Blue team standby').toString('base64'),
-        createdAt: now()
-      });
+      db.users.push({ id: uid(), username, email, passwordHash: hash(password), emailChanged: 0, profileImage: '', active: true, statusEncrypted: Buffer.from('Blue team standby').toString('base64'), createdAt: now() });
       writeDb(db);
       return json(res, 200, { ok: true });
     }
@@ -124,19 +95,14 @@ async function handleApi(req, res, urlObj) {
       const password = String(body.password || '');
       const throttle = db.loginThrottle[email] || { count: 0, blockedUntil: 0 };
       if (Date.now() < throttle.blockedUntil) return json(res, 429, { error: 'Temporarily blocked' });
-
       const user = db.users.find((u) => u.email === email && u.passwordHash === hash(password));
       if (!user) {
         throttle.count += 1;
-        if (throttle.count >= 5) {
-          throttle.blockedUntil = Date.now() + 60000;
-          throttle.count = 0;
-        }
+        if (throttle.count >= 5) { throttle.blockedUntil = Date.now() + 60000; throttle.count = 0; }
         db.loginThrottle[email] = throttle;
         writeDb(db);
         return json(res, 401, { error: 'Invalid credentials' });
       }
-
       db.loginThrottle[email] = { count: 0, blockedUntil: 0 };
       user.active = true;
       writeDb(db);
@@ -146,49 +112,30 @@ async function handleApi(req, res, urlObj) {
     if (req.method === 'GET' && pathname === '/api/users/search') {
       const userId = searchParams.get('userId');
       const q = sanitize(searchParams.get('q') || '', 30).toLowerCase();
-      const users = db.users
-        .filter((u) => u.id !== userId && (!q || u.username.toLowerCase().includes(q)))
-        .slice(0, 15)
-        .map((u) => ({ ...publicUser(u), postCount: db.posts.filter((p) => p.authorId === u.id).length }));
+      const users = db.users.filter((u) => u.id !== userId && (!q || u.username.toLowerCase().includes(q))).slice(0, 15).map((u) => ({ ...publicUser(u), postCount: db.posts.filter((p) => p.authorId === u.id).length }));
       return json(res, 200, { users });
     }
 
     if (req.method === 'GET' && pathname.match(/^\/api\/users\/[^/]+\/posts$/)) {
       const targetId = pathname.split('/')[3];
-      const target = db.users.find((u) => u.id === targetId);
-      if (!target) return json(res, 404, { error: 'User not found' });
-
-      const posts = db.posts
-        .filter((p) => p.authorId === targetId)
-        .slice()
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((p) => ({
-          ...p,
-          author: publicUser(db.users.find((u) => u.id === p.authorId)),
-          comments: p.comments.map((c) => ({ ...c, user: publicUser(db.users.find((u) => u.id === c.userId)) }))
-        }));
-      return json(res, 200, { posts, user: publicUser(target) });
+      const user = db.users.find((u) => u.id === targetId);
+      if (!user) return json(res, 404, { error: 'User not found' });
+      const posts = withUsers(db, db.posts.filter((p) => p.authorId === targetId).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      return json(res, 200, { user: publicUser(user), posts });
     }
 
     if (req.method === 'GET' && pathname === '/api/posts') {
-      const posts = db.posts
-        .slice()
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((p) => ({
-          ...p,
-          author: publicUser(db.users.find((u) => u.id === p.authorId)),
-          comments: p.comments.map((c) => ({ ...c, user: publicUser(db.users.find((u) => u.id === c.userId)) }))
-        }));
-      return json(res, 200, { posts });
+      return json(res, 200, { posts: withUsers(db, db.posts.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))) });
     }
 
     if (req.method === 'POST' && pathname === '/api/posts') {
       const body = await readBody(req);
       const user = db.users.find((u) => u.id === body.userId);
       const content = sanitize(body.content, 500);
+      const imageData = validateImageDataUrl(body.imageData || '');
       if (!user) return json(res, 404, { error: 'User not found' });
-      if (!content) return json(res, 400, { error: 'Content required' });
-      db.posts.push({ id: uid(), authorId: user.id, content, likes: [], comments: [], createdAt: now() });
+      if (!content && !imageData) return json(res, 400, { error: 'Post content required' });
+      db.posts.push({ id: uid(), authorId: user.id, content, imageData, likes: [], comments: [], createdAt: now() });
       writeDb(db);
       return json(res, 200, { ok: true });
     }
@@ -227,12 +174,8 @@ async function handleApi(req, res, urlObj) {
       if (!from || !to) return json(res, 404, { error: 'User not found' });
       if (from.id === to.id) return json(res, 400, { error: 'Cannot add yourself' });
       if (areFriends(db, from.id, to.id)) return json(res, 409, { error: 'Already friends' });
-
-      const exists = db.friendRequests.some((r) => (
-        ((r.from === from.id && r.to === to.id) || (r.from === to.id && r.to === from.id)) && r.status === 'pending'
-      ));
+      const exists = db.friendRequests.some((r) => ((r.from === from.id && r.to === to.id) || (r.from === to.id && r.to === from.id)) && r.status === 'pending');
       if (exists) return json(res, 409, { error: 'Request already pending' });
-
       db.friendRequests.push({ id: uid(), from: from.id, to: to.id, status: 'pending', createdAt: now() });
       notify(db, to.id, 'friend', `${from.username} sent you a friend request.`);
       writeDb(db);
@@ -241,9 +184,7 @@ async function handleApi(req, res, urlObj) {
 
     if (req.method === 'GET' && pathname.match(/^\/api\/friends\/requests\/[^/]+$/)) {
       const userId = pathname.split('/').pop();
-      const requests = db.friendRequests
-        .filter((r) => r.to === userId && r.status === 'pending')
-        .map((r) => ({ ...r, sender: publicUser(db.users.find((u) => u.id === r.from)) }));
+      const requests = db.friendRequests.filter((r) => r.to === userId && r.status === 'pending').map((r) => ({ ...r, sender: publicUser(db.users.find((u) => u.id === r.from)) }));
       return json(res, 200, { requests });
     }
 
@@ -252,11 +193,8 @@ async function handleApi(req, res, urlObj) {
       const request = db.friendRequests.find((r) => r.id === body.requestId && r.to === body.userId && r.status === 'pending');
       if (!request) return json(res, 404, { error: 'Request not found' });
       const me = db.users.find((u) => u.id === body.userId);
-
       request.status = body.action === 'accept' ? 'accepted' : 'rejected';
-      if (request.status === 'accepted' && !areFriends(db, request.from, request.to)) {
-        db.friendships.push({ id: uid(), a: request.from, b: request.to, createdAt: now() });
-      }
+      if (request.status === 'accepted' && !areFriends(db, request.from, request.to)) db.friendships.push({ id: uid(), a: request.from, b: request.to, createdAt: now() });
       notify(db, request.from, 'friend', `${me.username} ${request.status} your friend request.`);
       writeDb(db);
       return json(res, 200, { ok: true });
@@ -279,11 +217,9 @@ async function handleApi(req, res, urlObj) {
       const to = db.users.find((u) => u.id === body.to);
       if (!from || !to) return json(res, 404, { error: 'User not found' });
       if (!areFriends(db, from.id, to.id)) return json(res, 403, { error: 'You can message only friends' });
-
       const content = sanitize(body.content, 300);
       const imageData = validateImageDataUrl(body.imageData || '');
       if (!content && !imageData) return json(res, 400, { error: 'Message is empty' });
-
       db.messages.push({ id: uid(), from: from.id, to: to.id, content, imageData, createdAt: now() });
       notify(db, to.id, 'message', `${from.username} sent you a message.`);
       writeDb(db);
@@ -294,9 +230,7 @@ async function handleApi(req, res, urlObj) {
       const userId = searchParams.get('userId');
       const targetId = searchParams.get('targetId');
       if (!areFriends(db, userId, targetId)) return json(res, 403, { error: 'Messaging is available for friends only' });
-      const messages = db.messages.filter((m) => (
-        (m.from === userId && m.to === targetId) || (m.from === targetId && m.to === userId)
-      ));
+      const messages = db.messages.filter((m) => (m.from === userId && m.to === targetId) || (m.from === targetId && m.to === userId));
       return json(res, 200, { messages });
     }
 
@@ -305,27 +239,22 @@ async function handleApi(req, res, urlObj) {
       const body = await readBody(req);
       const user = db.users.find((u) => u.id === userId);
       if (!user) return json(res, 404, { error: 'User not found' });
-
-      const img = sanitize(body.profileImage, 250);
       const status = sanitize(body.status, 120);
       const newPass = String(body.newPassword || '');
       const newEmail = sanitize(body.newEmail, 120).toLowerCase();
-
-      if (img) user.profileImage = img;
+      const profileImage = validateImageDataUrl(body.profileImage || '');
+      if (profileImage) user.profileImage = profileImage;
       user.statusEncrypted = Buffer.from(status || 'Blue team mode').toString('base64');
-
       if (newPass) {
         if (newPass.length < 8 || !/[A-Z]/.test(newPass) || !/[0-9]/.test(newPass)) return json(res, 400, { error: 'Password policy failed' });
         user.passwordHash = hash(newPass);
       }
-
       if (newEmail) {
         if (user.emailChanged >= 1) return json(res, 400, { error: 'Email can only be changed once' });
         if (db.users.some((u) => u.email === newEmail && u.id !== user.id)) return json(res, 409, { error: 'Email already used' });
         user.email = newEmail;
         user.emailChanged += 1;
       }
-
       writeDb(db);
       return json(res, 200, { user: publicUser(user) });
     }
@@ -353,4 +282,4 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureDb();
-server.listen(PORT, () => console.log(`CyberConnect backend at http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`CypheraX backend at http://localhost:${PORT}`));

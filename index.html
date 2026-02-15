@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self';" />
-  <title>CyberConnect | IT Social Network</title>
+  <title>CypheraX | IT Social Network</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,8 +14,8 @@
   <div class="bg-overlay"></div>
   <main class="layout">
     <section id="auth-panel" class="card auth-card">
-      <h1>CyberConnect</h1>
-      <p class="subtitle">Blue-team styled social platform for IT community</p>
+      <h1>CypheraX 😎</h1>
+      <p class="subtitle">Calm cyan social hub for cybersecurity community</p>
       <div class="tab-buttons">
         <button class="tab-btn active" data-auth-tab="login">Login</button>
         <button class="tab-btn" data-auth-tab="register">Register</button>
@@ -44,14 +44,17 @@
     <section id="app-panel" class="hidden">
       <header class="card topbar">
         <div>
-          <h2>CyberConnect</h2>
+          <h2>CypheraX 😎</h2>
           <p id="active-status">Status: Active</p>
         </div>
+
         <div class="top-search-wrap">
           <input id="top-search-user" type="text" placeholder="Search username..." autocomplete="off" />
           <div id="top-search-results" class="search-results hidden"></div>
         </div>
+
         <div class="topbar-actions">
+          <button id="open-messages-btn" title="Messages">✉️</button>
           <button id="mobile-menu-toggle" class="mobile-only" aria-expanded="false" aria-controls="mobile-nav">☰ Menu</button>
           <button id="toggle-active-btn">Toggle Active</button>
           <button id="logout-btn" class="danger">Logout</button>
@@ -83,10 +86,26 @@
         <section class="card content">
           <div id="feed-view" class="view">
             <div id="selected-profile-card" class="item hidden"></div>
-            <h3>Share a post</h3>
-            <form id="post-form" class="inline-form">
-              <textarea id="post-content" maxlength="500" placeholder="Write something cybersecurity related..." required></textarea>
-              <button type="submit">Post</button>
+
+            <section class="topics card-soft">
+              <h4>Interesting Topics</h4>
+              <div id="topic-list" class="topic-list"></div>
+            </section>
+
+            <h3>Share a post ✨</h3>
+            <form id="post-form" class="post-form-modern">
+              <textarea id="post-content" maxlength="500" placeholder="Share your idea..." required></textarea>
+              <div class="row post-tools">
+                <input id="post-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <div class="emoji-bar" data-target="post-content">
+                  <button type="button" class="emoji-btn">😀</button>
+                  <button type="button" class="emoji-btn">🔥</button>
+                  <button type="button" class="emoji-btn">🛡️</button>
+                  <button type="button" class="emoji-btn">💻</button>
+                </div>
+                <button type="submit">Post</button>
+              </div>
+              <p class="small">Only images allowed, max 2MB upload.</p>
             </form>
             <h3 id="feed-title">Community Feed</h3>
             <div id="post-list" class="stack"></div>
@@ -101,15 +120,25 @@
           </div>
 
           <div id="messages-view" class="view hidden">
-            <h3>Messaging</h3>
-            <select id="message-target"></select>
-            <form id="message-form" class="inline-form message-form">
-              <input id="message-input" maxlength="300" placeholder="Type a secure message" />
-              <input id="message-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-              <button type="submit">Send</button>
-            </form>
-            <p class="small">Only images allowed, max 2MB.</p>
-            <div id="message-thread" class="stack"></div>
+            <h3>Messages ✉️</h3>
+            <div class="dm-layout">
+              <aside id="dm-friend-list" class="dm-friends"></aside>
+              <section class="dm-chat">
+                <div id="message-thread" class="stack dm-thread"></div>
+                <form id="message-form" class="dm-input-wrap">
+                  <input id="message-input" maxlength="300" placeholder="Write message..." />
+                  <input id="message-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                  <div class="emoji-bar" data-target="message-input">
+                    <button type="button" class="emoji-btn">😀</button>
+                    <button type="button" class="emoji-btn">😂</button>
+                    <button type="button" class="emoji-btn">💙</button>
+                    <button type="button" class="emoji-btn">🚀</button>
+                  </div>
+                  <button type="submit">Send</button>
+                </form>
+                <p class="small">Only friend chat. Image upload only, max 2MB.</p>
+              </section>
+            </div>
           </div>
 
           <div id="notifications-view" class="view hidden">
@@ -120,9 +149,9 @@
           <div id="settings-view" class="view hidden">
             <h3>Settings</h3>
             <form id="settings-form" class="stack">
-              <label>Profile Image URL</label>
-              <input id="profile-image-input" type="url" placeholder="https://example.com/avatar.png" />
-              <label>Status (encrypted when stored)</label>
+              <label>Upload Avatar</label>
+              <input id="profile-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+              <label>Status</label>
               <input id="status-input" maxlength="120" placeholder="Blue Team ready" />
               <label>Change Password</label>
               <input id="new-password" type="password" minlength="8" placeholder="New password" />
