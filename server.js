@@ -65,7 +65,7 @@ function withUsers(db, posts) {
   return posts.map((p) => ({
     ...p,
     author: publicUser(db.users.find((u) => u.id === p.authorId)),
-    comments: p.comments.map((c) => ({ ...c, user: publicUser(db.users.find((u) => u.id === c.userId)) }))
+    comments: (p.comments || []).map((c) => ({ ...c, user: publicUser(db.users.find((u) => u.id === c.userId)) }))
   }));
 }
 
@@ -125,7 +125,11 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'GET' && pathname === '/api/posts') {
-      return json(res, 200, { posts: withUsers(db, db.posts.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))) });
+      const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
+      const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 50);
+      const sorted = db.posts.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const slice = sorted.slice(offset, offset + limit);
+      return json(res, 200, { posts: withUsers(db, slice), total: sorted.length, hasMore: offset + limit < sorted.length, nextOffset: offset + slice.length });
     }
 
     if (req.method === 'POST' && pathname === '/api/posts') {
@@ -135,7 +139,47 @@ async function handleApi(req, res, urlObj) {
       const imageData = validateImageDataUrl(body.imageData || '');
       if (!user) return json(res, 404, { error: 'User not found' });
       if (!content && !imageData) return json(res, 400, { error: 'Post content required' });
-      db.posts.push({ id: uid(), authorId: user.id, content, imageData, likes: [], comments: [], createdAt: now() });
+      db.posts.push({ id: uid(), authorId: user.id, content, imageData, likes: [], comments: [], reports: [], createdAt: now(), editedAt: null });
+      writeDb(db);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'PUT' && pathname.match(/^\/api\/posts\/[^/]+$/)) {
+      const postId = pathname.split('/')[3];
+      const body = await readBody(req);
+      const post = db.posts.find((p) => p.id === postId);
+      if (!post) return json(res, 404, { error: 'Post not found' });
+      if (post.authorId !== body.userId) return json(res, 403, { error: 'Only author can edit' });
+      const content = sanitize(body.content, 500);
+      if (!content && !post.imageData) return json(res, 400, { error: 'Content required' });
+      post.content = content;
+      post.editedAt = now();
+      writeDb(db);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'DELETE' && pathname.match(/^\/api\/posts\/[^/]+$/)) {
+      const postId = pathname.split('/')[3];
+      const body = await readBody(req);
+      const idx = db.posts.findIndex((p) => p.id === postId);
+      if (idx < 0) return json(res, 404, { error: 'Post not found' });
+      if (db.posts[idx].authorId !== body.userId) return json(res, 403, { error: 'Only author can delete' });
+      db.posts.splice(idx, 1);
+      writeDb(db);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname.match(/^\/api\/posts\/[^/]+\/report$/)) {
+      const postId = pathname.split('/')[3];
+      const body = await readBody(req);
+      const post = db.posts.find((p) => p.id === postId);
+      const reporter = db.users.find((u) => u.id === body.userId);
+      if (!post || !reporter) return json(res, 404, { error: 'Not found' });
+      if (post.authorId === reporter.id) return json(res, 400, { error: 'Cannot report your own post' });
+      post.reports = post.reports || [];
+      if (post.reports.some((r) => r.userId === reporter.id)) return json(res, 409, { error: 'Already reported' });
+      post.reports.push({ id: uid(), userId: reporter.id, reason: sanitize(body.reason, 200) || 'Report', createdAt: now() });
+      notify(db, post.authorId, 'report', `${reporter.username} reported your post.`);
       writeDb(db);
       return json(res, 200, { ok: true });
     }
@@ -161,8 +205,8 @@ async function handleApi(req, res, urlObj) {
       const content = sanitize(body.content, 200);
       if (!post || !user) return json(res, 404, { error: 'Not found' });
       if (!content) return json(res, 400, { error: 'Content required' });
-      post.comments.push({ id: uid(), userId: user.id, content, createdAt: now() });
-      if (post.authorId !== user.id) notify(db, post.authorId, 'comment', `${user.username} commented on your post.`);
+      post.comments.push({ id: uid(), userId: user.id, content, kind: body.kind === 'reply' ? 'reply' : 'comment', createdAt: now() });
+      if (post.authorId !== user.id) notify(db, post.authorId, 'comment', `${user.username} replied to your post.`);
       writeDb(db);
       return json(res, 200, { ok: true });
     }

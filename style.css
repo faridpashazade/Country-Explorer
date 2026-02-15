@@ -102,6 +102,11 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .visually-hidden { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
 .file-name { min-width: 140px; }
 
+
+.feed-sentinel { height: 1px; }
+.load-more-btn { margin: 10px auto 0; display: block; min-width: 180px; }
+.reply-wrap { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(88,223,195,.35); }
+.reply-wrap input { flex: 1; }
 .stack { display: grid; gap: 10px; }
 .post, .item, .message-bubble { border: 1px solid var(--line); border-radius: 12px; background: rgba(16,39,52,.9); padding: 12px; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }

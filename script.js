@@ -12,7 +12,11 @@ const state = {
   messages: [],
   selectedProfile: null,
   topSearchResults: [],
-  activeChatFriendId: ''
+  activeChatFriendId: '',
+  feedOffset: 0,
+  feedLimit: 20,
+  hasMorePosts: true,
+  loadingPosts: false
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -95,8 +99,7 @@ async function loginUser(e) {
     state.user = data.user;
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
     e.target.reset();
-    el('post-image-name').textContent = 'No file selected';
-    await renderApp();
+    await renderApp(true);
   } catch (err) {
     setAuthMsg(err.message, true);
   }
@@ -108,16 +111,34 @@ function logout() {
   toggleAuth(false);
 }
 
-async function fetchAppData() {
+async function fetchPosts(reset = false) {
+  if (state.loadingPosts) return;
+  if (!state.hasMorePosts && !reset) return;
+  state.loadingPosts = true;
+  try {
+    if (reset) {
+      state.feedOffset = 0;
+      state.hasMorePosts = true;
+      state.posts = [];
+    }
+    const data = await api(`/api/posts?offset=${state.feedOffset}&limit=${state.feedLimit}`);
+    state.posts = reset ? data.posts : [...state.posts, ...data.posts];
+    state.feedOffset = data.nextOffset;
+    state.hasMorePosts = data.hasMore;
+  } finally {
+    state.loadingPosts = false;
+    renderFeedControls();
+  }
+}
+
+async function fetchAppMeta() {
   const uid = state.user.id;
-  const [posts, users, requests, friends, notifications] = await Promise.all([
-    api('/api/posts'),
+  const [users, requests, friends, notifications] = await Promise.all([
     api(`/api/users/search?userId=${encodeURIComponent(uid)}&q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`),
     api(`/api/friends/requests/${uid}`),
     api(`/api/friends/list/${uid}`),
     api(`/api/notifications/${uid}`)
   ]);
-  state.posts = posts.posts;
   state.users = users.users;
   state.requests = requests.requests;
   state.friends = friends.friends;
@@ -151,7 +172,7 @@ function renderTopics() {
 
 async function sendFriendRequest(targetId) {
   await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ from: state.user.id, to: targetId }) });
-  await renderApp();
+  await renderApp(false);
 }
 
 async function openUserProfile(user) {
@@ -192,19 +213,55 @@ function renderSelectedProfileCard() {
   const clearBtn = document.createElement('button');
   clearBtn.className = 'danger';
   clearBtn.textContent = 'Back';
-  clearBtn.onclick = async () => { state.selectedProfile = null; await renderApp(); };
+  clearBtn.onclick = async () => {
+    state.selectedProfile = null;
+    await fetchPosts(true);
+    renderFeed();
+    renderSelectedProfileCard();
+  };
   actions.appendChild(clearBtn);
+}
+
+function renderFeedControls() {
+  const btn = el('load-more-posts');
+  btn.classList.toggle('hidden', !state.hasMorePosts || state.selectedProfile);
+  btn.disabled = state.loadingPosts;
+  btn.textContent = state.loadingPosts ? 'Loading...' : 'Load more';
+}
+
+function buildReplyBox(postId) {
+  const wrap = document.createElement('div');
+  wrap.className = 'reply-wrap hidden';
+  const row = document.createElement('div');
+  row.className = 'row';
+  const input = document.createElement('input');
+  input.placeholder = '↪ Reply...';
+  input.maxLength = 200;
+  const send = document.createElement('button');
+  send.textContent = 'Reply';
+  send.onclick = async (e) => {
+    e.stopPropagation();
+    const content = sanitize(input.value, 200);
+    if (!content) return;
+    await api(`/api/posts/${postId}/comment`, { method: 'POST', body: JSON.stringify({ userId: state.user.id, content, kind: 'reply' }) });
+    await renderApp(false);
+  };
+  row.append(input, send);
+  wrap.appendChild(row);
+  return wrap;
 }
 
 function renderFeed() {
   el('feed-title').textContent = state.selectedProfile ? `Posts by @${state.selectedProfile.username}` : 'Community Feed';
   const wrap = el('post-list');
   wrap.innerHTML = '';
+
   state.posts.forEach((post) => {
     const postEl = document.createElement('article');
     postEl.className = 'post';
+
     const title = document.createElement('strong');
-    title.textContent = `${post.author?.username || 'Unknown'} • ${new Date(post.createdAt).toLocaleString()}`;
+    title.textContent = `${post.author?.username || 'Unknown'} • ${new Date(post.createdAt).toLocaleString()}${post.editedAt ? ' • edited' : ''}`;
     const p = document.createElement('p');
     p.textContent = post.content;
     postEl.append(title, p);
@@ -218,35 +275,76 @@ function renderFeed() {
 
     const actions = document.createElement('div');
     actions.className = 'actions';
+
     const likeBtn = document.createElement('button');
     const liked = post.likes.includes(state.user.id);
     likeBtn.textContent = `${liked ? 'Unlike' : 'Like'} (${post.likes.length})`;
-    likeBtn.onclick = async () => {
+    likeBtn.onclick = async (e) => {
+      e.stopPropagation();
       await api(`/api/posts/${post.id}/like`, { method: 'POST', body: JSON.stringify({ userId: state.user.id }) });
-      await renderApp();
+      await renderApp(false);
     };
-    const input = document.createElement('input');
-    input.placeholder = 'Comment...';
-    input.maxLength = 200;
-    const cBtn = document.createElement('button');
-    cBtn.textContent = 'Comment';
-    cBtn.onclick = async () => {
-      const content = sanitize(input.value, 200);
-      if (!content) return;
-      await api(`/api/posts/${post.id}/comment`, { method: 'POST', body: JSON.stringify({ userId: state.user.id, content }) });
-      await renderApp();
-    };
-    actions.append(likeBtn, input, cBtn);
+    actions.appendChild(likeBtn);
+
+    const replyBtn = document.createElement('button');
+    replyBtn.textContent = '↪ Reply';
+    actions.appendChild(replyBtn);
+
+    if (post.authorId === state.user.id) {
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const updated = prompt('Edit your post', post.content || '');
+        if (updated === null) return;
+        await api(`/api/posts/${post.id}`, { method: 'PUT', body: JSON.stringify({ userId: state.user.id, content: sanitize(updated, 500) }) });
+        await renderApp(false);
+      };
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'danger';
+      delBtn.textContent = 'Delete';
+      delBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this post?')) return;
+        await api(`/api/posts/${post.id}`, { method: 'DELETE', body: JSON.stringify({ userId: state.user.id }) });
+        await renderApp(true);
+      };
+      actions.append(editBtn, delBtn);
+    } else {
+      const reportBtn = document.createElement('button');
+      reportBtn.textContent = 'Report';
+      reportBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const reason = prompt('Report reason', 'Spam') || 'Spam';
+        await api(`/api/posts/${post.id}/report`, { method: 'POST', body: JSON.stringify({ userId: state.user.id, reason }) });
+        alert('Reported');
+      };
+      actions.appendChild(reportBtn);
+    }
+
     postEl.appendChild(actions);
+
+    const replyWrap = buildReplyBox(post.id);
+    replyBtn.onclick = (e) => { e.stopPropagation(); replyWrap.classList.toggle('hidden'); };
+
+    postEl.addEventListener('click', (event) => {
+      if (event.target.closest('button') || event.target.closest('input') || event.target.closest('textarea')) return;
+      replyWrap.classList.toggle('hidden');
+    });
 
     post.comments.forEach((c) => {
       const ce = document.createElement('div');
       ce.className = 'comment';
-      ce.textContent = `${c.user?.username || 'Unknown'}: ${c.content}`;
+      ce.textContent = `${c.kind === 'reply' ? '↪ ' : ''}${c.user?.username || 'Unknown'}: ${c.content}`;
       postEl.appendChild(ce);
     });
+
+    postEl.appendChild(replyWrap);
     wrap.appendChild(postEl);
   });
+
+  renderFeedControls();
 }
 
 function renderNetwork() {
@@ -282,8 +380,8 @@ function renderNetwork() {
     txt.textContent = `${r.sender?.username || 'User'} sent request`;
     const a = document.createElement('button'); a.textContent = 'Accept';
     const b = document.createElement('button'); b.textContent = 'Reject'; b.className = 'danger';
-    a.onclick = async () => { await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'accept', userId: state.user.id }) }); await renderApp(); };
-    b.onclick = async () => { await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'reject', userId: state.user.id }) }); await renderApp(); };
+    a.onclick = async () => { await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'accept', userId: state.user.id }) }); await renderApp(false); };
+    b.onclick = async () => { await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'reject', userId: state.user.id }) }); await renderApp(false); };
     item.append(txt, a, b);
     reqWrap.appendChild(item);
   });
@@ -403,10 +501,11 @@ function connectEmojiButtons() {
   });
 }
 
-async function renderApp() {
+async function renderApp(resetFeed = false) {
   if (!state.user) return toggleAuth(false);
   toggleAuth(true);
-  await fetchAppData();
+  await fetchAppMeta();
+  if (!state.selectedProfile) await fetchPosts(resetFeed);
   renderHeader();
   renderTopics();
   switchView(state.view);
@@ -417,6 +516,7 @@ async function renderApp() {
   await renderMessages();
 }
 
+// events
 document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('[data-auth-tab]').forEach((b) => b.classList.remove('active'));
@@ -444,7 +544,7 @@ el('toggle-active-btn').addEventListener('click', async () => {
   const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !state.user.active }) });
   state.user = data.user;
   localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
-  await renderApp();
+  await renderApp(false);
 });
 
 document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
@@ -455,7 +555,7 @@ el('mobile-menu-toggle').addEventListener('click', () => {
   el('mobile-menu-toggle').setAttribute('aria-expanded', willShow ? 'true' : 'false');
 });
 
-el('search-user').addEventListener('input', renderApp);
+el('search-user').addEventListener('input', () => renderApp(false));
 el('top-search-user').addEventListener('input', onTopSearchInput);
 el('message-emoji').addEventListener('click', () => {
   const input = el('message-input');
@@ -476,6 +576,19 @@ el('profile-image-file').addEventListener('change', () => {
   const file = el('profile-image-file').files[0];
   el('profile-image-name').textContent = file ? file.name : 'No file selected';
 });
+
+el('load-more-posts').addEventListener('click', async () => {
+  await fetchPosts(false);
+  renderFeed();
+});
+window.addEventListener('scroll', async () => {
+  if (state.view !== 'feed' || state.selectedProfile || !state.hasMorePosts || state.loadingPosts) return;
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 260) {
+    await fetchPosts(false);
+    renderFeed();
+  }
+});
+
 document.addEventListener('click', (event) => {
   if (!el('top-search-results').contains(event.target) && event.target !== el('top-search-user')) {
     state.topSearchResults = [];
@@ -494,7 +607,8 @@ el('post-form').addEventListener('submit', async (e) => {
     await api('/api/posts', { method: 'POST', body: JSON.stringify({ userId: state.user.id, content, imageData }) });
     e.target.reset();
     el('post-image-name').textContent = 'No file selected';
-    await renderApp();
+    state.selectedProfile = null;
+    await renderApp(true);
   } catch (err) {
     alert(err.message);
   }
@@ -541,11 +655,11 @@ el('settings-form').addEventListener('submit', async (e) => {
     el('settings-message').textContent = 'Settings saved.';
     e.target.reset();
     el('profile-image-name').textContent = 'No file selected';
-    await renderApp();
+    await renderApp(false);
   } catch (err) {
     el('settings-message').textContent = err.message;
   }
 });
 
 connectEmojiButtons();
-renderApp();
+renderApp(true);
