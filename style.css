@@ -132,6 +132,9 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .forum-comment { padding: 8px 10px; border-radius: 8px; background: rgba(14,36,50,.9); border: 1px solid rgba(88,223,195,.22); }
 .forum-comment-form { display: flex; gap: 8px; margin-top: 8px; }
 .forum-comment-form input { flex: 1; }
+
+.clickable-user { cursor: pointer; text-decoration: underline; text-decoration-color: rgba(88,223,195,.5); }
+.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .forum-layout { display: grid; grid-template-columns: 280px 1fr; gap: 12px; min-height: 420px; }
 .forum-topics { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(11,31,42,.9); display: grid; gap: 8px; align-content: start; }
 .forum-topic-btn { width: 100%; text-align: left; display: grid; gap: 3px; background: rgba(55,199,232,.1); }
@@ -173,6 +176,7 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
   .top-search-wrap { max-width: 100%; }
   .dm-layout { grid-template-columns: 1fr; }
   .forum-layout { grid-template-columns: 1fr; }
+  .profile-grid { grid-template-columns: 1fr; }
   button, input, textarea { width: 100%; }
   .dm-composer { border-radius: 16px; }
 }

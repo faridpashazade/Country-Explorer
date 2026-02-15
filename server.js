@@ -43,6 +43,7 @@ function readDb() {
   if (Array.isArray(db.forumPosts)) {
     for (const fp of db.forumPosts) {
       if (!Array.isArray(fp.comments)) { fp.comments = []; changed = true; }
+      if (!fp.visibility) { fp.visibility = 'public'; changed = true; }
     }
   }
   if (changed) writeDb(db);
@@ -56,6 +57,13 @@ function sanitize(txt, max = 500) { return String(txt || '').replace(/[<>]/g, ''
 function publicUser(u = {}) { return { id: u.id, username: u.username, email: u.email, emailChanged: u.emailChanged, profileImage: u.profileImage, active: u.active, statusEncrypted: u.statusEncrypted, createdAt: u.createdAt }; }
 function notify(db, userId, type, text) { db.notifications.unshift({ id: uid(), userId, type, text: sanitize(text, 200), createdAt: now() }); }
 function areFriends(db, a, b) { return db.friendships.some((f) => (f.a === a && f.b === b) || (f.a === b && f.b === a)); }
+function canAccessForumPost(db, post, viewerId) {
+  if (!post) return false;
+  if (post.visibility !== 'friends') return true;
+  if (!viewerId) return false;
+  if (post.authorId === viewerId) return true;
+  return areFriends(db, post.authorId, viewerId);
+}
 
 function validateImageDataUrl(imageData) {
   if (!imageData) return '';
@@ -149,12 +157,33 @@ async function handleApi(req, res, urlObj) {
       return json(res, 200, { users });
     }
 
+
     if (req.method === 'GET' && pathname.match(/^\/api\/users\/[^/]+\/posts$/)) {
       const targetId = pathname.split('/')[3];
       const user = db.users.find((u) => u.id === targetId);
       if (!user) return json(res, 404, { error: 'User not found' });
       const posts = withUsers(db, db.posts.filter((p) => p.authorId === targetId).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       return json(res, 200, { user: publicUser(user), posts });
+    }
+
+    if (req.method === 'GET' && pathname.match(/^\/api\/users\/[^/]+\/activity$/)) {
+      const targetId = pathname.split('/')[3];
+      const viewerId = searchParams.get('viewerId');
+      const user = db.users.find((u) => u.id === targetId);
+      if (!user) return json(res, 404, { error: 'User not found' });
+
+      const posts = withUsers(db, db.posts.filter((p) => p.authorId === targetId).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      const forumPosts = db.forumPosts
+        .filter((p) => p.authorId === targetId && canAccessForumPost(db, p, viewerId))
+        .slice()
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((p) => ({ ...p, topic: db.forumTopics.find((t) => t.id === p.topicId), author: publicUser(user) }));
+      const forumComments = db.forumPosts
+        .filter((p) => canAccessForumPost(db, p, viewerId))
+        .flatMap((p) => (p.comments || []).filter((c) => c.userId === targetId).map((c) => ({ ...c, postId: p.id, topic: db.forumTopics.find((t) => t.id === p.topicId), postPreview: sanitize(p.content, 100) })) )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+      return json(res, 200, { user: publicUser(user), posts, forumPosts, forumComments });
     }
 
     if (req.method === 'GET' && pathname === '/api/posts') {
@@ -237,6 +266,7 @@ async function handleApi(req, res, urlObj) {
       const user = db.users.find((u) => u.id === body.userId);
       const content = sanitize(body.content, 200);
       if (!post || !user) return json(res, 404, { error: 'Not found' });
+      if (!canAccessForumPost(db, post, user.id)) return json(res, 403, { error: 'Not allowed for this forum post' });
       if (!content) return json(res, 400, { error: 'Content required' });
       post.comments.push({ id: uid(), userId: user.id, content, kind: body.kind === 'reply' ? 'reply' : 'comment', createdAt: now() });
       if (post.authorId !== user.id) notify(db, post.authorId, 'comment', `${user.username} replied to your post.`);
@@ -251,8 +281,9 @@ async function handleApi(req, res, urlObj) {
 
     if (req.method === 'GET' && pathname.match(/^\/api\/forum\/topics\/[^/]+\/posts$/)) {
       const topicId = pathname.split('/')[4];
+      const viewerId = searchParams.get('viewerId');
       const posts = db.forumPosts
-        .filter((p) => p.topicId === topicId)
+        .filter((p) => p.topicId === topicId && canAccessForumPost(db, p, viewerId))
         .slice()
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .map((p) => ({
@@ -269,9 +300,10 @@ async function handleApi(req, res, urlObj) {
       const author = db.users.find((u) => u.id === body.userId);
       const topic = db.forumTopics.find((t) => t.id === topicId);
       const content = sanitize(body.content, 3000);
+      const visibility = body.visibility === 'friends' ? 'friends' : 'public';
       if (!author || !topic) return json(res, 404, { error: 'Not found' });
       if (!content) return json(res, 400, { error: 'Content required' });
-      db.forumPosts.push({ id: uid(), topicId, authorId: author.id, content, comments: [], createdAt: now() });
+      db.forumPosts.push({ id: uid(), topicId, authorId: author.id, content, visibility, comments: [], createdAt: now() });
       writeDb(db);
 
       return json(res, 200, { ok: true });
@@ -284,6 +316,7 @@ async function handleApi(req, res, urlObj) {
       const user = db.users.find((u) => u.id === body.userId);
       const content = sanitize(body.content, 300);
       if (!post || !user) return json(res, 404, { error: 'Not found' });
+      if (!canAccessForumPost(db, post, user.id)) return json(res, 403, { error: 'Not allowed for this forum post' });
       if (!content) return json(res, 400, { error: 'Content required' });
       post.comments = post.comments || [];
       post.comments.push({ id: uid(), userId: user.id, content, createdAt: now() });

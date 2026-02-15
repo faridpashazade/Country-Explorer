@@ -20,7 +20,8 @@ const state = {
   forumTopics: [],
   forumPosts: [],
   activeForumTopicId: '',
-  editingPostId: ''
+  editingPostId: '',
+  profileActivity: { user: null, posts: [], forumPosts: [], forumComments: [] }
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -340,9 +341,12 @@ function renderFeed() {
       reportBtn.textContent = 'Report';
       reportBtn.onclick = async (e) => {
         e.stopPropagation();
-        const reason = prompt('Report reason', 'Spam') || 'Spam';
-        await api(`/api/posts/${post.id}/report`, { method: 'POST', body: JSON.stringify({ userId: state.user.id, reason }) });
-        alert('Reported');
+        reportBtn.disabled = true;
+        await api(`/api/posts/${post.id}/report`, {
+          method: 'POST',
+          body: JSON.stringify({ userId: state.user.id, reason: 'Community report' })
+        });
+        reportBtn.textContent = 'Reported ✓';
       };
       actions.appendChild(reportBtn);
     }
@@ -378,8 +382,9 @@ function renderNetwork() {
     const item = document.createElement('div');
     item.className = 'item row';
     const isFriend = state.friends.some((f) => f.id === u.id);
-    item.innerHTML = `<span>${u.username} (${u.active ? 'active' : 'away'}) • Posts: ${u.postCount}</span><div class="actions"></div>`;
+    item.innerHTML = `<span class="clickable-user">${u.username} (${u.active ? 'active' : 'away'}) • Posts: ${u.postCount}</span><div class="actions"></div>`;
     const actions = item.querySelector('.actions');
+    item.querySelector('.clickable-user').onclick = () => openUserProfile(u);
 
     const viewBtn = document.createElement('button');
     viewBtn.textContent = 'View Posts';
@@ -515,12 +520,13 @@ async function renderForumPosts() {
   header.innerHTML = `<strong>${topic?.name || 'Forum Topic'}</strong><p class="small">${topic?.description || ''}</p>`;
   form.classList.remove('hidden');
 
-  const data = await api(`/api/forum/topics/${state.activeForumTopicId}/posts`);
+  const data = await api(`/api/forum/topics/${state.activeForumTopicId}/posts?viewerId=${encodeURIComponent(state.user.id)}`);
   state.forumPosts = data.posts;
   state.forumPosts.forEach((post) => {
     const item = document.createElement('article');
     item.className = 'forum-post';
-    item.innerHTML = `<strong>${post.author?.username || 'User'}</strong><p class="small">${new Date(post.createdAt).toLocaleString()}</p><p>${post.content}</p>`;
+    const vis = post.visibility === 'friends' ? 'Friends only' : 'Public';
+    item.innerHTML = `<strong>${post.author?.username || 'User'}</strong><p class="small">${new Date(post.createdAt).toLocaleString()} • ${vis}</p><p>${post.content}</p>`;
 
     const commentsWrap = document.createElement('div');
     commentsWrap.className = 'forum-comments';
@@ -550,6 +556,41 @@ async function renderForumPosts() {
 
     item.append(commentsWrap, form);
     list.appendChild(item);
+  });
+}
+
+
+async function renderProfileView() {
+  const data = await api(`/api/users/${state.user.id}/activity?viewerId=${state.user.id}`);
+  state.profileActivity = data;
+
+  el('profile-activity-summary').innerHTML = `<strong>${data.user.username}</strong><p class="small">Posts: ${data.posts.length} • Forum posts: ${data.forumPosts.length} • Forum comments: ${data.forumComments.length}</p>`;
+
+  const postsWrap = el('my-posts-list');
+  postsWrap.innerHTML = '';
+  data.posts.forEach((p) => {
+    const item = document.createElement('article');
+    item.className = 'item';
+    item.innerHTML = `<p>${p.content || '(image post)'}</p><p class="small">${new Date(p.createdAt).toLocaleString()}</p>`;
+    postsWrap.appendChild(item);
+  });
+
+  const forumPostsWrap = el('my-forum-posts-list');
+  forumPostsWrap.innerHTML = '';
+  data.forumPosts.forEach((p) => {
+    const item = document.createElement('article');
+    item.className = 'item';
+    item.innerHTML = `<p>${p.content}</p><p class="small">${p.topic?.name || 'Topic'} • ${new Date(p.createdAt).toLocaleString()}</p>`;
+    forumPostsWrap.appendChild(item);
+  });
+
+  const commentsWrap = el('my-forum-comments-list');
+  commentsWrap.innerHTML = '';
+  data.forumComments.forEach((c) => {
+    const item = document.createElement('article');
+    item.className = 'item';
+    item.innerHTML = `<p>${c.content}</p><p class="small">${c.topic?.name || 'Topic'} • ${new Date(c.createdAt).toLocaleString()}</p>`;
+    commentsWrap.appendChild(item);
   });
 }
 
@@ -611,6 +652,7 @@ async function renderApp(resetFeed = false) {
   renderNotifications();
   renderForumTopics();
   await renderForumPosts();
+  await renderProfileView();
   await renderMessages();
 }
 
@@ -756,7 +798,7 @@ el('forum-post-form').addEventListener('submit', async (e) => {
     if (!content) return;
     await api(`/api/forum/topics/${state.activeForumTopicId}/posts`, {
       method: 'POST',
-      body: JSON.stringify({ userId: state.user.id, content })
+      body: JSON.stringify({ userId: state.user.id, content, visibility: el('forum-visibility').value })
     });
     e.target.reset();
     await renderForumPosts();

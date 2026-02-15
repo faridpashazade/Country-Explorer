@@ -66,6 +66,7 @@
         <button class="nav-btn" data-view="network">Friends</button>
         <button class="nav-btn" data-view="messages">Messages</button>
         <button class="nav-btn" data-view="forum">Forum</button>
+        <button class="nav-btn" data-view="profile">Profile</button>
         <button class="nav-btn" data-view="notifications">Notifications</button>
         <button class="nav-btn" data-view="settings">Settings</button>
       </nav>
@@ -80,6 +81,7 @@
             <button class="nav-btn" data-view="network">Friends</button>
             <button class="nav-btn" data-view="messages">Messages</button>
         <button class="nav-btn" data-view="forum">Forum</button>
+            <button class="nav-btn" data-view="profile">Profile</button>
             <button class="nav-btn" data-view="notifications">Notifications</button>
             <button class="nav-btn" data-view="settings">Settings</button>
           </nav>
@@ -136,6 +138,11 @@
                 <div id="forum-topic-header" class="forum-header">Select a topic to join discussion.</div>
                 <form id="forum-post-form" class="stack hidden">
                   <textarea id="forum-post-input" maxlength="3000" placeholder="Write your forum opinion..."></textarea>
+                  <label>Visibility</label>
+                  <select id="forum-visibility">
+                    <option value="public">Everyone can see and comment</option>
+                    <option value="friends">Only friends can see and comment</option>
+                  </select>
                   <button type="submit">Share in topic</button>
                 </form>
                 <div id="forum-post-list" class="stack"></div>
@@ -162,6 +169,26 @@
                 <p class="small">Only friend chat. Image upload only, max 2MB.</p>
               </section>
             </div>
+          </div>
+
+
+          <div id="profile-view" class="view hidden">
+            <h3>My Profile Activity 👤</h3>
+            <div id="profile-activity-summary" class="item">Loading profile...</div>
+            <div class="profile-grid">
+              <section>
+                <h4>My Feed Posts</h4>
+                <div id="my-posts-list" class="stack"></div>
+              </section>
+              <section>
+                <h4>My Forum Posts</h4>
+                <div id="my-forum-posts-list" class="stack"></div>
+              </section>
+            </div>
+            <section>
+              <h4>My Forum Comments</h4>
+              <div id="my-forum-comments-list" class="stack"></div>
+            </section>
           </div>
 
           <div id="notifications-view" class="view hidden">
