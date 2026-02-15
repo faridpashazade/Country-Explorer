@@ -126,6 +126,12 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .post-image, .message-image { max-width: 260px; border-radius: 10px; margin-top: 8px; display: block; }
 
 
+
+#editing-indicator { color: #8ff2ff; font-weight: 600; margin: 4px 0 0; }
+.forum-comments { display: grid; gap: 6px; margin-top: 8px; }
+.forum-comment { padding: 8px 10px; border-radius: 8px; background: rgba(14,36,50,.9); border: 1px solid rgba(88,223,195,.22); }
+.forum-comment-form { display: flex; gap: 8px; margin-top: 8px; }
+.forum-comment-form input { flex: 1; }
 .forum-layout { display: grid; grid-template-columns: 280px 1fr; gap: 12px; min-height: 420px; }
 .forum-topics { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(11,31,42,.9); display: grid; gap: 8px; align-content: start; }
 .forum-topic-btn { width: 100%; text-align: left; display: grid; gap: 3px; background: rgba(55,199,232,.1); }

@@ -95,6 +95,7 @@
             </section>
 
             <h3>Share a post ✨</h3>
+            <p id="editing-indicator" class="small hidden">✏️ Editing post...</p>
             <form id="post-form" class="post-form-modern">
               <textarea id="post-content" maxlength="500" placeholder="Share your idea..." required></textarea>
               <div class="row post-tools">
@@ -107,7 +108,8 @@
                   <button type="button" class="emoji-btn">🛡️</button>
                   <button type="button" class="emoji-btn">💻</button>
                 </div>
-                <button type="submit">Post</button>
+                <button id="post-submit-btn" type="submit">Post</button>
+                <button id="cancel-edit-btn" class="danger hidden" type="button">Cancel edit</button>
               </div>
               <p class="small">Only images allowed, max 2MB upload.</p>
             </form>

@@ -19,7 +19,8 @@ const state = {
   loadingPosts: false,
   forumTopics: [],
   forumPosts: [],
-  activeForumTopicId: ''
+  activeForumTopicId: '',
+  editingPostId: ''
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -235,6 +236,26 @@ function renderFeedControls() {
   btn.textContent = state.loadingPosts ? 'Loading...' : 'Load more';
 }
 
+
+function setEditingState(post = null) {
+  const indicator = el('editing-indicator');
+  const cancelBtn = el('cancel-edit-btn');
+  const submitBtn = el('post-submit-btn');
+  if (!post) {
+    state.editingPostId = '';
+    indicator.classList.add('hidden');
+    cancelBtn.classList.add('hidden');
+    submitBtn.textContent = 'Post';
+    return;
+  }
+  state.editingPostId = post.id;
+  indicator.classList.remove('hidden');
+  cancelBtn.classList.remove('hidden');
+  submitBtn.textContent = 'Save edit';
+  el('post-content').value = post.content || '';
+  el('post-content').focus();
+}
+
 function buildReplyBox(postId) {
   const wrap = document.createElement('div');
   wrap.className = 'reply-wrap hidden';
@@ -299,12 +320,9 @@ function renderFeed() {
     if (post.authorId === state.user.id) {
       const editBtn = document.createElement('button');
       editBtn.textContent = 'Edit';
-      editBtn.onclick = async (e) => {
+      editBtn.onclick = (e) => {
         e.stopPropagation();
-        const updated = prompt('Edit your post', post.content || '');
-        if (updated === null) return;
-        await api(`/api/posts/${post.id}`, { method: 'PUT', body: JSON.stringify({ userId: state.user.id, content: sanitize(updated, 500) }) });
-        await renderApp(false);
+        setEditingState(post);
       };
 
       const delBtn = document.createElement('button');
@@ -503,6 +521,34 @@ async function renderForumPosts() {
     const item = document.createElement('article');
     item.className = 'forum-post';
     item.innerHTML = `<strong>${post.author?.username || 'User'}</strong><p class="small">${new Date(post.createdAt).toLocaleString()}</p><p>${post.content}</p>`;
+
+    const commentsWrap = document.createElement('div');
+    commentsWrap.className = 'forum-comments';
+    (post.comments || []).forEach((c) => {
+      const cEl = document.createElement('div');
+      cEl.className = 'forum-comment';
+      cEl.textContent = `${c.user?.username || 'User'}: ${c.content}`;
+      commentsWrap.appendChild(cEl);
+    });
+
+    const form = document.createElement('form');
+    form.className = 'forum-comment-form';
+    const input = document.createElement('input');
+    input.placeholder = 'Write comment...';
+    input.maxLength = 300;
+    const btn = document.createElement('button');
+    btn.type = 'submit';
+    btn.textContent = 'Comment';
+    form.append(input, btn);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const content = sanitize(input.value, 300);
+      if (!content) return;
+      await api(`/api/forum/posts/${post.id}/comments`, { method: 'POST', body: JSON.stringify({ userId: state.user.id, content }) });
+      await renderForumPosts();
+    };
+
+    item.append(commentsWrap, form);
     list.appendChild(item);
   });
 }
@@ -618,6 +664,11 @@ el('post-image').addEventListener('change', () => {
   const file = el('post-image').files[0];
   el('post-image-name').textContent = file ? file.name : 'No file selected';
 });
+el('cancel-edit-btn').addEventListener('click', () => {
+  el('post-form').reset();
+  el('post-image-name').textContent = 'No file selected';
+  setEditingState(null);
+});
 el('message-image').addEventListener('change', () => {
   const file = el('message-image').files[0];
   const label = el('message-image-name');
@@ -652,6 +703,15 @@ el('post-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
     const content = sanitize(el('post-content').value, 500);
+    if (state.editingPostId) {
+      if (!content) return;
+      await api(`/api/posts/${state.editingPostId}`, { method: 'PUT', body: JSON.stringify({ userId: state.user.id, content }) });
+      e.target.reset();
+      setEditingState(null);
+      await renderApp(false);
+      return;
+    }
+
     const file = el('post-image').files[0];
     ensureSafeImageFile(file);
     const imageData = file ? await fileToDataUrl(file) : '';

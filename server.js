@@ -40,6 +40,11 @@ function readDb() {
     }
   }
   if (!db.forumTopics.length) { seedForumTopics(db); changed = true; }
+  if (Array.isArray(db.forumPosts)) {
+    for (const fp of db.forumPosts) {
+      if (!Array.isArray(fp.comments)) { fp.comments = []; changed = true; }
+    }
+  }
   if (changed) writeDb(db);
   return db;
 }
@@ -250,7 +255,11 @@ async function handleApi(req, res, urlObj) {
         .filter((p) => p.topicId === topicId)
         .slice()
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((p) => ({ ...p, author: publicUser(db.users.find((u) => u.id === p.authorId)) }));
+        .map((p) => ({
+          ...p,
+          author: publicUser(db.users.find((u) => u.id === p.authorId)),
+          comments: (p.comments || []).map((c) => ({ ...c, user: publicUser(db.users.find((u) => u.id === c.userId)) }))
+        }));
       return json(res, 200, { posts });
     }
 
@@ -262,12 +271,28 @@ async function handleApi(req, res, urlObj) {
       const content = sanitize(body.content, 700);
       if (!author || !topic) return json(res, 404, { error: 'Not found' });
       if (!content) return json(res, 400, { error: 'Content required' });
-      db.forumPosts.push({ id: uid(), topicId, authorId: author.id, content, createdAt: now() });
+      db.forumPosts.push({ id: uid(), topicId, authorId: author.id, content, comments: [], createdAt: now() });
+      writeDb(db);
+
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname.match(/^\/api\/forum\/posts\/[^/]+\/comments$/)) {
+      const postId = pathname.split('/')[4];
+      const body = await readBody(req);
+      const post = db.forumPosts.find((p) => p.id === postId);
+      const user = db.users.find((u) => u.id === body.userId);
+      const content = sanitize(body.content, 300);
+      if (!post || !user) return json(res, 404, { error: 'Not found' });
+      if (!content) return json(res, 400, { error: 'Content required' });
+      post.comments = post.comments || [];
+      post.comments.push({ id: uid(), userId: user.id, content, createdAt: now() });
       writeDb(db);
       return json(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && pathname === '/api/friends/request') {
+
       const body = await readBody(req);
       const from = db.users.find((u) => u.id === body.from);
       const to = db.users.find((u) => u.id === body.to);
