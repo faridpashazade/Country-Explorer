@@ -31,9 +31,18 @@ const decode = (txt) => { try { return atob(txt || ''); } catch { return ''; } }
 const sanitize = (txt, max = 500) => String(txt || '').replace(/[<>]/g, '').trim().slice(0, max);
 
 async function api(path, options = {}) {
-  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+  const token = state.user?.token || '';
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(path, { ...options, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) {
+    if (res.status === 401) {
+      logout();
+      throw new Error('Session expired. Please login again.');
+    }
+    throw new Error(data.error || 'Request failed');
+  }
   return data;
 }
 
@@ -108,7 +117,7 @@ async function loginUser(e) {
       method: 'POST',
       body: JSON.stringify({ email: sanitize(el('login-email').value, 120), password: el('login-password').value })
     });
-    state.user = data.user;
+    state.user = { ...data.user, token: data.user.token };
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
     e.target.reset();
     await renderApp(true);
@@ -146,7 +155,7 @@ async function fetchPosts(reset = false) {
 async function fetchAppMeta() {
   const uid = state.user.id;
   const [users, requests, friends, notifications, forumTopics] = await Promise.all([
-    api(`/api/users/search?userId=${encodeURIComponent(uid)}&q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`),
+    api(`/api/users/search?q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`),
     api(`/api/friends/requests/${uid}`),
     api(`/api/friends/list/${uid}`),
     api(`/api/notifications/${uid}`),
@@ -187,7 +196,7 @@ function renderTopics() {
 
 async function sendFriendRequest(targetId) {
   try {
-    await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ from: state.user.id, to: targetId }) });
+    await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ to: targetId }) });
     setNetworkMessage('Friend request sent ✅');
     await renderApp(true);
   } catch (err) {
@@ -198,7 +207,7 @@ async function sendFriendRequest(targetId) {
 async function openUserProfile(user) {
   if (!user) return;
   state.selectedProfile = user;
-  const { posts } = await api(`/api/users/${user.id}/posts?viewerId=${state.user.id}`);
+  const { posts } = await api(`/api/users/${user.id}/posts`);
   state.posts = posts;
   switchView('feed');
   renderSelectedProfileCard();
@@ -481,7 +490,7 @@ async function renderMessages() {
   thread.classList.remove('hidden');
   form.classList.remove('hidden');
 
-  const data = await api(`/api/messages/thread?userId=${state.user.id}&targetId=${state.activeChatFriendId}`);
+  const data = await api(`/api/messages/thread?targetId=${state.activeChatFriendId}`);
   state.messages = data.messages;
   state.messages.forEach((m) => {
     const bubble = document.createElement('div');
@@ -548,7 +557,7 @@ async function renderForumPosts() {
   header.innerHTML = `<strong>${topic?.name || 'Forum Topic'}</strong><p class="small">${topic?.description || ''}</p>`;
   form.classList.remove('hidden');
 
-  const data = await api(`/api/forum/topics/${state.activeForumTopicId}/posts?viewerId=${encodeURIComponent(state.user.id)}`);
+  const data = await api(`/api/forum/topics/${state.activeForumTopicId}/posts`);
   state.forumPosts = data.posts;
   state.forumPosts.forEach((post) => {
     const item = document.createElement('article');
@@ -589,7 +598,7 @@ async function renderForumPosts() {
 
 
 async function renderProfileView() {
-  const data = await api(`/api/users/${state.user.id}/activity?viewerId=${state.user.id}`);
+  const data = await api(`/api/users/${state.user.id}/activity`);
   state.profileActivity = data;
 
   el('profile-activity-summary').innerHTML = `<strong>${data.user.username}</strong><p class="small">Posts: ${data.posts.length} • Forum posts: ${data.forumPosts.length} • Forum comments: ${data.forumComments.length}</p>`;
@@ -649,7 +658,7 @@ async function onTopSearchInput() {
     state.topSearchResults = [];
     return renderTopSearchResults();
   }
-  const data = await api(`/api/users/search?userId=${encodeURIComponent(state.user.id)}&q=${encodeURIComponent(q)}`);
+  const data = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
   state.topSearchResults = data.users.slice(0, 8);
   renderTopSearchResults();
 }
@@ -710,7 +719,7 @@ el('open-messages-btn').addEventListener('click', async () => {
 
 el('toggle-active-btn').addEventListener('click', async () => {
   const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !state.user.active }) });
-  state.user = data.user;
+  state.user = { ...data.user, token: state.user?.token };
   localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
   await renderApp(true);
 });
@@ -725,7 +734,7 @@ el('mobile-menu-toggle').addEventListener('click', () => {
 
 el('search-user').addEventListener('input', async () => {
   try {
-    const data = await api(`/api/users/search?userId=${encodeURIComponent(state.user.id)}&q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`);
+    const data = await api(`/api/users/search?q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`);
     state.users = data.users;
     renderNetwork();
   } catch {}
@@ -812,7 +821,7 @@ el('message-form').addEventListener('submit', async (e) => {
     if (!state.activeChatFriendId || (!content && !imageData)) return;
     await api('/api/messages', {
       method: 'POST',
-      body: JSON.stringify({ from: state.user.id, to: state.activeChatFriendId, content, imageData })
+      body: JSON.stringify({ to: state.activeChatFriendId, content, imageData })
     });
     e.target.reset();
     el('message-image-name').textContent = 'No file selected';
@@ -874,7 +883,7 @@ el('settings-form').addEventListener('submit', async (e) => {
         newEmail: sanitize(el('new-email').value, 120)
       })
     });
-    state.user = data.user;
+    state.user = { ...data.user, token: state.user?.token };
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
     el('settings-message').textContent = 'Settings saved.';
     e.target.reset();

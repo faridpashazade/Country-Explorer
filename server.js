@@ -11,7 +11,7 @@ const MAX_BODY_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
-const defaultDb = { users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {}, forumTopics: [], forumPosts: [] };
+const defaultDb = { users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {}, forumTopics: [], forumPosts: [], sessions: [] };
 
 function seedForumTopics(db) {
   if (!db.forumTopics.length) {
@@ -40,6 +40,7 @@ function readDb() {
     }
   }
   if (!db.forumTopics.length) { seedForumTopics(db); changed = true; }
+  if (!Array.isArray(db.sessions)) { db.sessions = []; changed = true; }
   if (Array.isArray(db.forumPosts)) {
     for (const fp of db.forumPosts) {
       if (!Array.isArray(fp.comments)) { fp.comments = []; changed = true; }
@@ -65,6 +66,40 @@ function canAccessForumPost(db, post, viewerId) {
   return areFriends(db, post.authorId, viewerId);
 }
 
+function setSecurityHeaders(res, contentType = 'application/json; charset=utf-8') {
+  return {
+    'Content-Type': contentType,
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
+    'Cache-Control': 'no-store'
+  };
+}
+
+function createSession(db, userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  db.sessions = (db.sessions || []).filter((s) => s.userId !== userId).slice(0, 199);
+  db.sessions.push({ id: uid(), userId, token, createdAt: now() });
+  return token;
+}
+
+function getAuthUser(req, db) {
+  const auth = String(req.headers.authorization || '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return null;
+  const session = (db.sessions || []).find((s) => s.token === token);
+  if (!session) return null;
+  return db.users.find((u) => u.id === session.userId) || null;
+}
+
+function validatePathname(pathname) {
+  return !/[<>\"'`]/.test(pathname || '');
+}
+
 function validateImageDataUrl(imageData) {
   if (!imageData) return '';
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(imageData);
@@ -76,7 +111,7 @@ function validateImageDataUrl(imageData) {
 }
 
 function json(res, status, payload) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(status, setSecurityHeaders(res));
   res.end(JSON.stringify(payload));
 }
 
@@ -93,12 +128,25 @@ function readBody(req) {
 }
 
 function serveStatic(req, res, pathname) {
-  let filePath = path.join(ROOT, pathname === '/' ? 'index.html' : pathname.slice(1));
+  let decodedPath = pathname || '/';
+  try { decodedPath = decodeURIComponent(decodedPath); } catch { return json(res, 400, { error: 'Invalid path encoding' }); }
+  if (!validatePathname(decodedPath)) return json(res, 400, { error: 'Invalid path' });
+  let normalized = path.normalize(decodedPath || '/');
+  if (normalized.includes('..')) return json(res, 403, { error: 'Forbidden' });
+  if (!normalized.startsWith('/')) normalized = `/${normalized}`;
+
+  let filePath = path.join(ROOT, normalized === '/' ? 'index.html' : normalized.slice(1));
   if (!filePath.startsWith(ROOT)) return json(res, 403, { error: 'Forbidden' });
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) filePath = path.join(ROOT, 'index.html');
+
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    const looksLikeAsset = /\.[a-zA-Z0-9]+$/.test(normalized);
+    if (looksLikeAsset) return json(res, 404, { error: 'File not found' });
+    filePath = path.join(ROOT, 'index.html');
+  }
+
   const ext = path.extname(filePath).toLowerCase();
-  const type = ext === '.html' ? 'text/html' : ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : ext === '.png' ? 'image/png' : ext === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
-  res.writeHead(200, { 'Content-Type': type });
+  const type = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.png' ? 'image/png' : ext === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
+  res.writeHead(200, setSecurityHeaders(res, type));
   fs.createReadStream(filePath).pipe(res);
 }
 
@@ -113,6 +161,7 @@ function withUsers(db, posts) {
 async function handleApi(req, res, urlObj) {
   const db = readDb();
   const { pathname, searchParams } = urlObj;
+  const authUser = getAuthUser(req, db);
 
   try {
     if (req.method === 'POST' && pathname === '/api/auth/register') {
@@ -146,19 +195,21 @@ async function handleApi(req, res, urlObj) {
       }
       db.loginThrottle[email] = { count: 0, blockedUntil: 0 };
       user.active = true;
+      const token = createSession(db, user.id);
       writeDb(db);
-      return json(res, 200, { user: publicUser(user) });
+      return json(res, 200, { user: { ...publicUser(user), token } });
     }
 
     if (req.method === 'GET' && pathname === '/api/users/search') {
-      const userId = searchParams.get('userId');
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const q = sanitize(searchParams.get('q') || '', 30).toLowerCase();
-      const users = db.users.filter((u) => u.id !== userId && (!q || u.username.toLowerCase().includes(q))).slice(0, 15).map((u) => ({ ...publicUser(u), postCount: db.posts.filter((p) => p.authorId === u.id).length }));
+      const users = db.users.filter((u) => u.id !== authUser.id && (!q || u.username.toLowerCase().includes(q))).slice(0, 15).map((u) => ({ ...publicUser(u), postCount: db.posts.filter((p) => p.authorId === u.id).length }));
       return json(res, 200, { users });
     }
 
 
     if (req.method === 'GET' && pathname.match(/^\/api\/users\/[^/]+\/posts$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const targetId = pathname.split('/')[3];
       const user = db.users.find((u) => u.id === targetId);
       if (!user) return json(res, 404, { error: 'User not found' });
@@ -167,8 +218,9 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'GET' && pathname.match(/^\/api\/users\/[^/]+\/activity$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const targetId = pathname.split('/')[3];
-      const viewerId = searchParams.get('viewerId');
+      const viewerId = authUser.id;
       const user = db.users.find((u) => u.id === targetId);
       if (!user) return json(res, 404, { error: 'User not found' });
 
@@ -195,8 +247,9 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname === '/api/posts') {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const body = await readBody(req);
-      const user = db.users.find((u) => u.id === body.userId);
+      const user = authUser;
       const content = sanitize(body.content, 500);
       const imageData = validateImageDataUrl(body.imageData || '');
       if (!user) return json(res, 404, { error: 'User not found' });
@@ -207,11 +260,12 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'PUT' && pathname.match(/^\/api\/posts\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const postId = pathname.split('/')[3];
       const body = await readBody(req);
       const post = db.posts.find((p) => p.id === postId);
       if (!post) return json(res, 404, { error: 'Post not found' });
-      if (post.authorId !== body.userId) return json(res, 403, { error: 'Only author can edit' });
+      if (post.authorId !== authUser.id) return json(res, 403, { error: 'Only author can edit' });
       const content = sanitize(body.content, 500);
       if (!content && !post.imageData) return json(res, 400, { error: 'Content required' });
       post.content = content;
@@ -221,21 +275,23 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'DELETE' && pathname.match(/^\/api\/posts\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const postId = pathname.split('/')[3];
-      const body = await readBody(req);
+      await readBody(req);
       const idx = db.posts.findIndex((p) => p.id === postId);
       if (idx < 0) return json(res, 404, { error: 'Post not found' });
-      if (db.posts[idx].authorId !== body.userId) return json(res, 403, { error: 'Only author can delete' });
+      if (db.posts[idx].authorId !== authUser.id) return json(res, 403, { error: 'Only author can delete' });
       db.posts.splice(idx, 1);
       writeDb(db);
       return json(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && pathname.match(/^\/api\/posts\/[^/]+\/report$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const postId = pathname.split('/')[3];
       const body = await readBody(req);
       const post = db.posts.find((p) => p.id === postId);
-      const reporter = db.users.find((u) => u.id === body.userId);
+      const reporter = authUser;
       if (!post || !reporter) return json(res, 404, { error: 'Not found' });
       if (post.authorId === reporter.id) return json(res, 400, { error: 'Cannot report your own post' });
       post.reports = post.reports || [];
@@ -247,10 +303,11 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname.match(/^\/api\/posts\/[^/]+\/like$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const postId = pathname.split('/')[3];
-      const body = await readBody(req);
+      await readBody(req);
       const post = db.posts.find((p) => p.id === postId);
-      const user = db.users.find((u) => u.id === body.userId);
+      const user = authUser;
       if (!post || !user) return json(res, 404, { error: 'Not found' });
       const liked = post.likes.includes(user.id);
       post.likes = liked ? post.likes.filter((id) => id !== user.id) : [...post.likes, user.id];
@@ -260,13 +317,13 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname.match(/^\/api\/posts\/[^/]+\/comment$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const postId = pathname.split('/')[3];
       const body = await readBody(req);
       const post = db.posts.find((p) => p.id === postId);
-      const user = db.users.find((u) => u.id === body.userId);
+      const user = authUser;
       const content = sanitize(body.content, 200);
       if (!post || !user) return json(res, 404, { error: 'Not found' });
-      if (!canAccessForumPost(db, post, user.id)) return json(res, 403, { error: 'Not allowed for this forum post' });
       if (!content) return json(res, 400, { error: 'Content required' });
       post.comments.push({ id: uid(), userId: user.id, content, kind: body.kind === 'reply' ? 'reply' : 'comment', createdAt: now() });
       if (post.authorId !== user.id) notify(db, post.authorId, 'comment', `${user.username} replied to your post.`);
@@ -280,8 +337,9 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname === '/api/forum/topics') {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const body = await readBody(req);
-      const author = db.users.find((u) => u.id === body.userId);
+      const author = authUser;
       const name = sanitize(body.name, 60);
       const description = sanitize(body.description, 300);
       if (!author) return json(res, 404, { error: 'User not found' });
@@ -294,8 +352,9 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'GET' && pathname.match(/^\/api\/forum\/topics\/[^/]+\/posts$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const topicId = pathname.split('/')[4];
-      const viewerId = searchParams.get('viewerId');
+      const viewerId = authUser.id;
       const posts = db.forumPosts
         .filter((p) => p.topicId === topicId && canAccessForumPost(db, p, viewerId))
         .slice()
@@ -309,9 +368,10 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname.match(/^\/api\/forum\/topics\/[^/]+\/posts$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const topicId = pathname.split('/')[4];
       const body = await readBody(req);
-      const author = db.users.find((u) => u.id === body.userId);
+      const author = authUser;
       const topic = db.forumTopics.find((t) => t.id === topicId);
       const content = sanitize(body.content, 3000);
       const visibility = body.visibility === 'friends' ? 'friends' : 'public';
@@ -324,10 +384,11 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname.match(/^\/api\/forum\/posts\/[^/]+\/comments$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const postId = pathname.split('/')[4];
       const body = await readBody(req);
       const post = db.forumPosts.find((p) => p.id === postId);
-      const user = db.users.find((u) => u.id === body.userId);
+      const user = authUser;
       const content = sanitize(body.content, 300);
       if (!post || !user) return json(res, 404, { error: 'Not found' });
       if (!canAccessForumPost(db, post, user.id)) return json(res, 403, { error: 'Not allowed for this forum post' });
@@ -339,9 +400,9 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'POST' && pathname === '/api/friends/request') {
-
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const body = await readBody(req);
-      const from = db.users.find((u) => u.id === body.from);
+      const from = authUser;
       const to = db.users.find((u) => u.id === body.to);
       if (!from || !to) return json(res, 404, { error: 'User not found' });
       if (from.id === to.id) return json(res, 400, { error: 'Cannot add yourself' });
@@ -355,16 +416,19 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'GET' && pathname.match(/^\/api\/friends\/requests\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const userId = pathname.split('/').pop();
+      if (userId !== authUser.id) return json(res, 403, { error: 'Forbidden' });
       const requests = db.friendRequests.filter((r) => r.to === userId && r.status === 'pending').map((r) => ({ ...r, sender: publicUser(db.users.find((u) => u.id === r.from)) }));
       return json(res, 200, { requests });
     }
 
     if (req.method === 'POST' && pathname === '/api/friends/respond') {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const body = await readBody(req);
-      const request = db.friendRequests.find((r) => r.id === body.requestId && r.to === body.userId && r.status === 'pending');
+      const request = db.friendRequests.find((r) => r.id === body.requestId && r.to === authUser.id && r.status === 'pending');
       if (!request) return json(res, 404, { error: 'Request not found' });
-      const me = db.users.find((u) => u.id === body.userId);
+      const me = authUser;
       request.status = body.action === 'accept' ? 'accepted' : 'rejected';
       if (request.status === 'accepted' && !areFriends(db, request.from, request.to)) db.friendships.push({ id: uid(), a: request.from, b: request.to, createdAt: now() });
       notify(db, request.from, 'friend', `${me.username} ${request.status} your friend request.`);
@@ -373,19 +437,24 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'GET' && pathname.match(/^\/api\/friends\/list\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const userId = pathname.split('/').pop();
+      if (userId !== authUser.id) return json(res, 403, { error: 'Forbidden' });
       const ids = db.friendships.flatMap((f) => (f.a === userId ? [f.b] : (f.b === userId ? [f.a] : [])));
       return json(res, 200, { friends: db.users.filter((u) => ids.includes(u.id)).map(publicUser) });
     }
 
     if (req.method === 'GET' && pathname.match(/^\/api\/notifications\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const userId = pathname.split('/').pop();
+      if (userId !== authUser.id) return json(res, 403, { error: 'Forbidden' });
       return json(res, 200, { notifications: db.notifications.filter((n) => n.userId === userId).slice(0, 30) });
     }
 
     if (req.method === 'POST' && pathname === '/api/messages') {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const body = await readBody(req);
-      const from = db.users.find((u) => u.id === body.from);
+      const from = authUser;
       const to = db.users.find((u) => u.id === body.to);
       if (!from || !to) return json(res, 404, { error: 'User not found' });
       if (!areFriends(db, from.id, to.id)) return json(res, 403, { error: 'You can message only friends' });
@@ -399,7 +468,8 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'GET' && pathname === '/api/messages/thread') {
-      const userId = searchParams.get('userId');
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
+      const userId = authUser.id;
       const targetId = searchParams.get('targetId');
       if (!areFriends(db, userId, targetId)) return json(res, 403, { error: 'Messaging is available for friends only' });
       const messages = db.messages.filter((m) => (m.from === userId && m.to === targetId) || (m.from === targetId && m.to === userId));
@@ -407,9 +477,11 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'PUT' && pathname.match(/^\/api\/settings\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const userId = pathname.split('/').pop();
+      if (userId !== authUser.id) return json(res, 403, { error: 'Forbidden' });
       const body = await readBody(req);
-      const user = db.users.find((u) => u.id === userId);
+      const user = authUser;
       if (!user) return json(res, 404, { error: 'User not found' });
       const status = sanitize(body.status, 120);
       const newPass = String(body.newPassword || '');
@@ -432,9 +504,11 @@ async function handleApi(req, res, urlObj) {
     }
 
     if (req.method === 'PUT' && pathname.match(/^\/api\/users\/[^/]+\/active$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const userId = pathname.split('/')[3];
+      if (userId !== authUser.id) return json(res, 403, { error: 'Forbidden' });
       const body = await readBody(req);
-      const user = db.users.find((u) => u.id === userId);
+      const user = authUser;
       if (!user) return json(res, 404, { error: 'User not found' });
       user.active = !!body.active;
       writeDb(db);
