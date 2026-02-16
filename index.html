@@ -44,9 +44,12 @@
 
     <section id="app-panel" class="hidden">
       <header class="card topbar">
-        <div>
-          <h2>CypheraX 😎</h2>
-          <p id="active-status">Status: Active</p>
+        <div class="brand-mini">
+          <span class="brand-dot">🛡️</span>
+          <div>
+            <h2>CypheraX</h2>
+            <p id="active-status">Status: Active</p>
+          </div>
         </div>
 
         <div class="top-search-wrap">
@@ -54,29 +57,31 @@
           <div id="top-search-results" class="search-results hidden"></div>
         </div>
 
-        <div class="topbar-actions">
-          <button id="open-messages-btn" title="Messages">✉️</button>
+        <div class="topbar-actions top-icon-nav">
+          <button class="top-icon-btn active" data-view="feed" title="Feed">📰</button>
+          <button class="top-icon-btn" data-view="network" title="Friends">👥</button>
+          <button id="open-messages-btn" class="top-icon-btn" data-view="messages" title="Messages">💬</button>
           <div class="notif-wrap">
-            <button id="notification-bell" title="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
+            <button id="notification-bell" class="top-icon-btn" title="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
             <div id="notification-dropdown" class="notif-dropdown hidden">
               <div class="row notif-head"><strong>Notifications</strong><div class="actions"><button id="mark-all-read" type="button">Mark all as read</button><button id="view-all-notifications" type="button">View all</button></div></div>
               <div id="notification-dropdown-list" class="stack"></div>
             </div>
           </div>
-          <button id="mobile-menu-toggle" class="mobile-only" aria-expanded="false" aria-controls="mobile-nav">☰ Menu</button>
-          <button id="toggle-active-btn">Toggle Active</button>
-          <button id="logout-btn" class="danger">Logout</button>
+          <button class="top-icon-btn" data-view="settings" title="Settings">⚙️</button>
+          <button id="logout-btn" class="top-icon-btn danger" title="Logout">🚪</button>
+          <button id="mobile-menu-toggle" class="mobile-only top-icon-btn" aria-expanded="false" aria-controls="mobile-nav">☰</button>
         </div>
       </header>
 
       <nav id="mobile-nav" class="card mobile-nav hidden">
-        <button class="nav-btn" data-view="feed">Feed</button>
-        <button class="nav-btn" data-view="network">Friends</button>
-        <button class="nav-btn" data-view="messages">Messages</button>
-        <button class="nav-btn" data-view="forum">Forum</button>
-        <button class="nav-btn" data-view="profile">Profile</button>
-        <button class="nav-btn" data-view="notifications">Notifications</button>
-        <button class="nav-btn" data-view="settings">Settings</button>
+        <button class="nav-btn" data-view="feed" title="Feed">📰</button>
+        <button class="nav-btn" data-view="network" title="Friends">👥</button>
+        <button class="nav-btn" data-view="messages" title="Messages">💬</button>
+        <button class="nav-btn" data-view="forum" title="Forum">🧠</button>
+        <button class="nav-btn" data-view="profile" title="Profile">👤</button>
+        <button class="nav-btn" data-view="notifications" title="Notifications">🔔</button>
+        <button class="nav-btn" data-view="settings" title="Settings">⚙️</button>
       </nav>
 
       <div class="grid">
@@ -208,12 +213,13 @@
                 </header>
                 <div id="message-thread" class="stack dm-thread hidden"></div>
                 <p id="typing-indicator" class="small hidden">Typing...</p>
+                <button id="dm-scroll-bottom" class="dm-scroll-btn hidden" type="button" title="Scroll to bottom">↓</button>
                 <form id="message-form" class="dm-composer hidden">
                   <textarea id="message-input" maxlength="300" placeholder="Mesaj yaz..."></textarea>
                   <button type="button" id="message-emoji" class="icon-btn" title="Emoji">😀</button>
                   <label for="message-image" class="icon-btn flag-btn" title="Upload image">🚩</label>
                   <input id="message-image" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-                  <button type="submit" class="icon-btn send-btn" title="Send">➤</button>
+                  <button type="button" id="message-send" class="icon-btn send-btn" title="Send">➤</button>
                 </form>
                 <span id="message-image-name" class="small file-name hidden">No file selected</span>
                 <p class="small">Only friend chat. Image upload only, max 2MB.</p>
@@ -278,6 +284,11 @@
             <p id="settings-message" class="message"></p>
           </div>
         </section>
+        <aside class="card online-sidebar" id="online-sidebar">
+          <div class="row"><h3>Online</h3></div>
+          <div id="online-friends-list" class="stack"></div>
+        </aside>
+
       </div>
     </section>
   </main>

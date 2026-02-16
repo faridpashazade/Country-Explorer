@@ -154,6 +154,19 @@ function setNetworkMessage(msg, isErr = false) {
   m.textContent = msg;
 }
 
+
+function positionFloatingDropdown(anchorEl, panelEl, width = 320) {
+  if (!anchorEl || !panelEl) return;
+  const rect = anchorEl.getBoundingClientRect();
+  const panelWidth = Math.min(width, window.innerWidth * 0.92);
+  let left = rect.right - panelWidth;
+  left = Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12));
+  panelEl.style.position = 'fixed';
+  panelEl.style.top = `${Math.min(window.innerHeight - 20, rect.bottom + 8)}px`;
+  panelEl.style.left = `${left}px`;
+  panelEl.style.width = `${panelWidth}px`;
+}
+
 function showToast(msg, isErr = false) {
   const t = el('ui-toast');
   if (!t) return;
@@ -173,7 +186,7 @@ function switchView(view) {
   state.view = view;
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   el(`${view}-view`).classList.remove('hidden');
-  document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.nav-btn, .top-icon-btn[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   if (window.innerWidth <= 900) {
     el('mobile-nav').classList.add('hidden');
     el('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
@@ -703,11 +716,38 @@ function updateActiveChatHeader() {
   header.classList.remove('hidden');
 }
 
+function renderOnlineSidebar() {
+  const wrap = el('online-friends-list');
+  if (!wrap) return;
+  const onlineFriends = state.friends.filter((f) => {
+    const ps = getPresence(f.id);
+    return ps.status === 'online' || ps.status === 'idle';
+  });
+  wrap.innerHTML = '';
+  if (!onlineFriends.length) {
+    wrap.innerHTML = '<div class="item small">Heç kim online deyil</div>';
+    return;
+  }
+  onlineFriends.forEach((f) => {
+    const row = document.createElement('button');
+    row.className = 'dm-friend-item';
+    row.type = 'button';
+    row.innerHTML = `<div class="dm-conv-head"><span class="dm-presence-dot online"></span><strong>@${f.username}</strong></div>`;
+    row.onclick = async () => {
+      state.activeChatFriendId = f.id;
+      switchView('messages');
+      await renderMessages();
+    };
+    wrap.appendChild(row);
+  });
+}
+
 async function renderMessages() {
   const thread = el('message-thread');
   const form = el('message-form');
   const empty = el('dm-empty-state');
   const imageName = el('message-image-name');
+  const scrollBtn = el('dm-scroll-bottom');
   thread.innerHTML = '';
 
   const convData = await api('/api/messages/conversations');
@@ -756,8 +796,15 @@ async function renderMessages() {
     thread.appendChild(bubble);
   });
 
-  thread.scrollTop = thread.scrollHeight;
+  const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+  if (nearBottom || !thread.dataset.hasManualScroll) thread.scrollTop = thread.scrollHeight;
   el('typing-indicator').classList.toggle('hidden', !state.typingByUser[state.activeChatFriendId]);
+
+  thread.onscroll = () => {
+    const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+    thread.dataset.hasManualScroll = atBottom ? '' : '1';
+    scrollBtn.classList.toggle('hidden', atBottom);
+  };
 }
 
 
@@ -926,6 +973,7 @@ function renderTopSearchResults() {
     wrap.appendChild(btn);
   });
   wrap.classList.remove('hidden');
+  positionFloatingDropdown(el('top-search-user'), wrap, 420);
 }
 
 async function onTopSearchInput() {
@@ -937,6 +985,7 @@ async function onTopSearchInput() {
   const data = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
   state.topSearchResults = data.users.slice(0, 8);
   renderTopSearchResults();
+  positionFloatingDropdown(el('top-search-user'), el('top-search-results'), 420);
 }
 
 function connectEmojiButtons() {
@@ -962,6 +1011,7 @@ async function renderApp(resetFeed = false) {
   renderSelectedProfileCard();
   renderFeed();
   renderNetwork();
+  renderOnlineSidebar();
   renderNotifications();
   renderForumTopics();
   await renderForumPosts();
@@ -993,10 +1043,6 @@ el('register-form').addEventListener('submit', registerUser);
 el('login-form').addEventListener('submit', loginUser);
 el('logout-btn').addEventListener('click', logout);
 el('open-messages-btn').addEventListener('click', async () => {
-  if (state.view === 'messages') {
-    switchView('feed');
-    return;
-  }
   switchView('messages');
   await renderMessages();
 });
@@ -1009,6 +1055,10 @@ el('toggle-active-btn').addEventListener('click', async () => {
 });
 
 document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+document.querySelectorAll('.top-icon-btn[data-view]').forEach((btn) => btn.addEventListener('click', async () => {
+  switchView(btn.dataset.view);
+  if (btn.dataset.view === 'messages') await renderMessages();
+}));
 el('mobile-menu-toggle').addEventListener('click', () => {
   const mobileNav = el('mobile-nav');
   const willShow = mobileNav.classList.contains('hidden');
@@ -1056,7 +1106,9 @@ el('edit-status-btn').addEventListener('click', () => {
 
 el('notification-bell').addEventListener('click', (e) => {
   e.stopPropagation();
-  el('notification-dropdown').classList.toggle('hidden');
+  const panel = el('notification-dropdown');
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) positionFloatingDropdown(el('notification-bell'), panel, 420);
 });
 
 el('mark-all-read').addEventListener('click', () => {
@@ -1080,6 +1132,11 @@ window.addEventListener('scroll', async () => {
     await fetchPosts(false);
     renderFeed();
   }
+});
+
+window.addEventListener('resize', () => {
+  if (!el('notification-dropdown').classList.contains('hidden')) positionFloatingDropdown(el('notification-bell'), el('notification-dropdown'), 420);
+  if (!el('top-search-results').classList.contains('hidden')) positionFloatingDropdown(el('top-search-user'), el('top-search-results'), 420);
 });
 
 document.addEventListener('click', (event) => {
@@ -1117,6 +1174,23 @@ el('post-form').addEventListener('submit', async (e) => {
   } catch (err) {
     alert(err.message);
   }
+});
+
+el('message-send').addEventListener('click', () => {
+  el('message-form').requestSubmit();
+});
+
+el('dm-scroll-bottom').addEventListener('click', () => {
+  const thread = el('message-thread');
+  thread.scrollTop = thread.scrollHeight;
+});
+
+el('message-input').addEventListener('input', () => {
+  const ta = el('message-input');
+  ta.style.height = 'auto';
+  ta.style.height = `${Math.min(ta.scrollHeight, 128)}px`;
+  const chat = ta.closest('.dm-chat');
+  if (chat) chat.style.paddingBottom = `${Math.max(12, ta.offsetHeight - 24)}px`;
 });
 
 el('message-input').addEventListener('keydown', async (e) => {
