@@ -55,6 +55,13 @@
 
         <div class="topbar-actions">
           <button id="open-messages-btn" title="Messages">✉️</button>
+          <div class="notif-wrap">
+            <button id="notification-bell" title="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
+            <div id="notification-dropdown" class="notif-dropdown hidden">
+              <div class="row notif-head"><strong>Notifications</strong><div class="actions"><button id="mark-all-read" type="button">Mark all as read</button><button id="view-all-notifications" type="button">View all</button></div></div>
+              <div id="notification-dropdown-list" class="stack"></div>
+            </div>
+          </div>
           <button id="mobile-menu-toggle" class="mobile-only" aria-expanded="false" aria-controls="mobile-nav">☰ Menu</button>
           <button id="toggle-active-btn">Toggle Active</button>
           <button id="logout-btn" class="danger">Logout</button>
@@ -76,6 +83,19 @@
           <img id="profile-preview" class="avatar" alt="profile" />
           <h3 id="profile-name"></h3>
           <p id="status-text" class="small"></p>
+          <button id="edit-status-btn" class="icon-btn status-edit-btn" type="button" title="Edit status">✏️</button>
+          <section class="sidebar-badges">
+            <h4>Badges</h4>
+            <div id="badge-list" class="chip-wrap"></div>
+          </section>
+          <section class="sidebar-stats">
+            <h4>This week stats</h4>
+            <div class="stats-grid">
+              <div class="stat-item"><span class="small">Posts</span><strong id="stat-posts-week">0</strong></div>
+              <div class="stat-item"><span class="small">Replies</span><strong id="stat-replies-week">0</strong></div>
+              <div class="stat-item"><span class="small">Likes</span><strong id="stat-likes-week">0</strong></div>
+            </div>
+          </section>
           <nav>
             <button class="nav-btn active" data-view="feed">Feed</button>
             <button class="nav-btn" data-view="network">Friends</button>

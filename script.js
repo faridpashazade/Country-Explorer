@@ -21,7 +21,8 @@ const state = {
   forumPosts: [],
   activeForumTopicId: '',
   editingPostId: '',
-  profileActivity: { user: null, posts: [], forumPosts: [], forumComments: [] }
+  profileActivity: { user: null, posts: [], forumPosts: [], forumComments: [] },
+  readNotifications: []
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -29,6 +30,27 @@ const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', '
 const el = (id) => document.getElementById(id);
 const decode = (txt) => { try { return atob(txt || ''); } catch { return ''; } };
 const sanitize = (txt, max = 500) => String(txt || '').replace(/[<>]/g, '').trim().slice(0, max);
+
+function formatRelativeTime(iso) {
+  const diff = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diff < 60) return `${diff} san əvvəl`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} dəq əvvəl`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} saat əvvəl`;
+  return `${Math.floor(diff / 86400)} gün əvvəl`;
+}
+
+function extractTags(text = '') {
+  const tags = String(text).match(/#[\w-]+/g) || [];
+  return tags.slice(0, 4);
+}
+
+function calcWeekStats() {
+  const myPosts = state.posts.filter((p) => p.authorId === state.user.id);
+  const posts = myPosts.length;
+  const replies = state.posts.reduce((acc, p) => acc + (p.comments || []).filter((c) => c.userId === state.user.id).length, 0);
+  const likes = myPosts.reduce((acc, p) => acc + (p.likes || []).length, 0);
+  return { posts, replies, likes };
+}
 
 async function api(path, options = {}) {
   const token = state.user?.token || '';
@@ -175,6 +197,17 @@ function renderHeader() {
   el('active-status').textContent = `Status: ${state.user.active ? 'Active 🟢' : 'Away ⚪'}`;
   el('status-text').textContent = `Status message: ${decode(state.user.statusEncrypted) || 'Blue team mode'}`;
   el('status-input').value = decode(state.user.statusEncrypted) || '';
+
+  const badgeWrap = el('badge-list');
+  const badges = ['Blue Team Starter', 'OWASP Learner', 'SOC Newbie'];
+  badgeWrap.innerHTML = badges.map((b) => `<span class="stat-chip">${b}</span>`).join('');
+
+  const week = calcWeekStats();
+  el('stat-posts-week').textContent = week.posts;
+  el('stat-replies-week').textContent = week.replies;
+  el('stat-likes-week').textContent = week.likes;
+
+  renderNotificationDropdown();
 }
 
 function renderTopics() {
@@ -280,14 +313,17 @@ function setEditingState(post = null) {
 
 function buildReplyBox(postId) {
   const wrap = document.createElement('div');
-  wrap.className = 'reply-wrap hidden';
+  wrap.className = 'reply-wrap';
   const row = document.createElement('div');
   row.className = 'row';
   const input = document.createElement('input');
-  input.placeholder = '↪ Reply...';
+  input.placeholder = 'Reply yaz...';
   input.maxLength = 200;
+  input.className = 'reply-input';
   const send = document.createElement('button');
-  send.textContent = 'Reply';
+  send.className = 'reply-send-btn';
+  send.textContent = '➤';
+  send.title = 'Send reply';
   send.onclick = async (e) => {
     e.stopPropagation();
     const content = sanitize(input.value, 200);
@@ -309,11 +345,28 @@ function renderFeed() {
     const postEl = document.createElement('article');
     postEl.className = 'post';
 
-    const title = document.createElement('strong');
-    title.textContent = `${post.author?.username || 'Unknown'} • ${new Date(post.createdAt).toLocaleString()}${post.editedAt ? ' • edited' : ''}`;
+    const head = document.createElement('div');
+    head.className = 'post-head';
+    head.innerHTML = `
+      <img class="mini-avatar" src="${post.author?.profileImage || DEFAULT_AVATAR}" alt="${post.author?.username || 'User'}" />
+      <div class="post-meta"><strong>${post.author?.username || 'Unknown'}</strong><span class="small">${formatRelativeTime(post.createdAt)}${post.editedAt ? ' • edited' : ''}</span></div>
+    `;
+
+    const tags = extractTags(post.content || '');
+    const tagRow = document.createElement('div');
+    tagRow.className = 'chip-wrap';
+    tags.forEach((tag) => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.textContent = tag;
+      tagRow.appendChild(chip);
+    });
+
     const p = document.createElement('p');
     p.textContent = post.content;
-    postEl.append(title, p);
+    postEl.append(head);
+    if (tags.length) postEl.appendChild(tagRow);
+    postEl.appendChild(p);
 
     if (post.imageData) {
       const postImg = document.createElement('img');
@@ -323,25 +376,50 @@ function renderFeed() {
     }
 
     const actions = document.createElement('div');
-    actions.className = 'actions';
+    actions.className = 'actions action-bar';
 
     const likeBtn = document.createElement('button');
     const liked = post.likes.includes(state.user.id);
-    likeBtn.textContent = `${liked ? 'Unlike' : 'Like'} (${post.likes.length})`;
+    likeBtn.className = `icon-action ${liked ? 'active-like' : ''}`;
+    likeBtn.textContent = `${liked ? '♥' : '♡'} ${post.likes.length}`;
     likeBtn.onclick = async (e) => {
       e.stopPropagation();
-      await api(`/api/posts/${post.id}/like`, { method: 'POST', body: JSON.stringify({ userId: state.user.id }) });
-      await renderApp(true);
+      const wasLiked = post.likes.includes(state.user.id);
+      post.likes = wasLiked ? post.likes.filter((id) => id !== state.user.id) : [...post.likes, state.user.id];
+      renderFeed();
+      try {
+        await api(`/api/posts/${post.id}/like`, { method: 'POST', body: JSON.stringify({ userId: state.user.id }) });
+      } catch {
+        post.likes = wasLiked ? [...post.likes, state.user.id] : post.likes.filter((id) => id !== state.user.id);
+        renderFeed();
+      }
     };
     actions.appendChild(likeBtn);
 
     const replyBtn = document.createElement('button');
-    replyBtn.textContent = '↪ Reply';
+    replyBtn.className = 'icon-action';
+    replyBtn.textContent = '💬 Reply';
     actions.appendChild(replyBtn);
+
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'icon-action';
+    shareBtn.textContent = '↗ Share';
+    shareBtn.onclick = () => {
+      shareBtn.textContent = '✓ Shared';
+      setTimeout(() => { shareBtn.textContent = '↗ Share'; }, 900);
+    };
+    actions.appendChild(shareBtn);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'icon-action';
+    saveBtn.textContent = '🔖 Save';
+    saveBtn.onclick = () => saveBtn.classList.toggle('active-like');
+    actions.appendChild(saveBtn);
 
     if (post.authorId === state.user.id) {
       const editBtn = document.createElement('button');
-      editBtn.textContent = 'Edit';
+      editBtn.className = 'icon-action';
+      editBtn.textContent = '✏️ Edit';
       editBtn.onclick = (e) => {
         e.stopPropagation();
         setEditingState(post);
@@ -357,35 +435,20 @@ function renderFeed() {
         await renderApp(true);
       };
       actions.append(editBtn, delBtn);
-    } else {
-      const reportBtn = document.createElement('button');
-      reportBtn.textContent = 'Report';
-      reportBtn.onclick = async (e) => {
-        e.stopPropagation();
-        reportBtn.disabled = true;
-        await api(`/api/posts/${post.id}/report`, {
-          method: 'POST',
-          body: JSON.stringify({ userId: state.user.id, reason: 'Community report' })
-        });
-        reportBtn.textContent = 'Reported ✓';
-      };
-      actions.appendChild(reportBtn);
     }
 
     postEl.appendChild(actions);
 
     const replyWrap = buildReplyBox(post.id);
-    replyBtn.onclick = (e) => { e.stopPropagation(); replyWrap.classList.toggle('hidden'); };
+    replyBtn.onclick = (e) => {
+      e.stopPropagation();
+      replyWrap.classList.toggle('open');
+    };
 
-    postEl.addEventListener('click', (event) => {
-      if (event.target.closest('button') || event.target.closest('input') || event.target.closest('textarea')) return;
-      replyWrap.classList.toggle('hidden');
-    });
-
-    post.comments.forEach((c) => {
+    (post.comments || []).forEach((c) => {
       const ce = document.createElement('div');
       ce.className = 'comment';
-      ce.textContent = `${c.kind === 'reply' ? '↪ ' : ''}${c.user?.username || 'Unknown'}: ${c.content}`;
+      ce.innerHTML = `<strong>${c.user?.username || 'Unknown'}</strong> <span class="small">• ${formatRelativeTime(c.createdAt)}</span><p>${c.content}</p>`;
       postEl.appendChild(ce);
     });
 
@@ -512,15 +575,36 @@ async function renderMessages() {
   });
 }
 
+
+function renderNotificationDropdown() {
+  const badge = el('notification-badge');
+  const list = el('notification-dropdown-list');
+  const unread = state.notifications.filter((n) => !state.readNotifications.includes(n.id));
+  badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
+  badge.classList.toggle('hidden', unread.length === 0);
+
+  list.innerHTML = '';
+  state.notifications.slice(0, 6).forEach((n) => {
+    const item = document.createElement('div');
+    item.className = `notif-item ${state.readNotifications.includes(n.id) ? '' : 'unread'}`;
+    item.innerHTML = `<p>${n.text}</p><span class="small">${formatRelativeTime(n.createdAt)}</span>`;
+    list.appendChild(item);
+  });
+  if (!state.notifications.length) {
+    list.innerHTML = '<div class="item small">No notifications yet.</div>';
+  }
+}
+
 function renderNotifications() {
   const wrap = el('notification-list');
   wrap.innerHTML = '';
   state.notifications.forEach((n) => {
     const item = document.createElement('div');
-    item.className = 'item';
+    item.className = `item ${state.readNotifications.includes(n.id) ? '' : 'notif-row-unread'}`;
     item.textContent = `${new Date(n.createdAt).toLocaleString()} — ${n.text}`;
     wrap.appendChild(item);
   });
+  renderNotificationDropdown();
 }
 
 
@@ -765,6 +849,27 @@ el('profile-image-file').addEventListener('change', () => {
   el('profile-image-name').textContent = file ? file.name : 'No file selected';
 });
 
+el('edit-status-btn').addEventListener('click', () => {
+  switchView('settings');
+  el('status-input').focus();
+});
+
+el('notification-bell').addEventListener('click', (e) => {
+  e.stopPropagation();
+  el('notification-dropdown').classList.toggle('hidden');
+});
+
+el('mark-all-read').addEventListener('click', () => {
+  state.readNotifications = state.notifications.map((n) => n.id);
+  renderNotificationDropdown();
+  renderNotifications();
+});
+
+el('view-all-notifications').addEventListener('click', () => {
+  switchView('notifications');
+  el('notification-dropdown').classList.add('hidden');
+});
+
 el('load-more-posts').addEventListener('click', async () => {
   await fetchPosts(false);
   renderFeed();
@@ -781,6 +886,9 @@ document.addEventListener('click', (event) => {
   if (!el('top-search-results').contains(event.target) && event.target !== el('top-search-user')) {
     state.topSearchResults = [];
     renderTopSearchResults();
+  }
+  if (!el('notification-dropdown').contains(event.target) && event.target !== el('notification-bell')) {
+    el('notification-dropdown').classList.add('hidden');
   }
 });
 
