@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
+const { Server } = require('socket.io');
 
 const PORT = process.env.PORT || 4173;
 const ROOT = __dirname;
@@ -10,6 +11,9 @@ const DB_PATH = path.join(ROOT, 'data', 'db.json');
 const MAX_BODY_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const IDLE_MS = 30000;
+const OFFLINE_GRACE_MS = 15000;
+const ACTIVITY_MIN_INTERVAL_MS = 1000;
 
 const defaultDb = { users: [], posts: [], friendRequests: [], friendships: [], messages: [], notifications: [], loginThrottle: {}, forumTopics: [], forumPosts: [], sessions: [] };
 
@@ -41,6 +45,11 @@ function readDb() {
   }
   if (!db.forumTopics.length) { seedForumTopics(db); changed = true; }
   if (!Array.isArray(db.sessions)) { db.sessions = []; changed = true; }
+  if (Array.isArray(db.messages)) {
+    for (const m of db.messages) {
+      if (!Array.isArray(m.readBy)) { m.readBy = [m.from].filter(Boolean); changed = true; }
+    }
+  }
   if (Array.isArray(db.forumPosts)) {
     for (const fp of db.forumPosts) {
       if (!Array.isArray(fp.comments)) { fp.comments = []; changed = true; }
@@ -87,13 +96,17 @@ function createSession(db, userId) {
   return token;
 }
 
-function getAuthUser(req, db) {
-  const auth = String(req.headers.authorization || '');
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+function getUserByToken(db, token) {
   if (!token) return null;
   const session = (db.sessions || []).find((s) => s.token === token);
   if (!session) return null;
   return db.users.find((u) => u.id === session.userId) || null;
+}
+
+function getAuthUser(req, db) {
+  const auth = String(req.headers.authorization || '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  return getUserByToken(db, token);
 }
 
 function validatePathname(pathname) {
@@ -158,6 +171,81 @@ function withUsers(db, posts) {
   }));
 }
 
+const presenceState = new Map();
+const socketUserMap = new Map();
+const socketWatchMap = new Map();
+let io = null;
+
+function getPresence(userId) {
+  if (!presenceState.has(userId)) {
+    presenceState.set(userId, { status: 'offline', lastActiveAt: '', connections: 0, sockets: new Set(), offlineTimer: null, lastBroadcast: 0 });
+  }
+  return presenceState.get(userId);
+}
+
+function computePresenceStatus(p) {
+  if (p.connections <= 0) return 'offline';
+  const idle = Date.now() - (p.lastActiveAt ? new Date(p.lastActiveAt).getTime() : 0) > IDLE_MS;
+  return idle ? 'idle' : 'online';
+}
+
+function emitPresenceToWatchers(userId) {
+  if (!io) return;
+  const p = getPresence(userId);
+  const payload = { userId, status: p.status, lastActiveAt: p.lastActiveAt || '' };
+  io.to(`user:${userId}`).emit('presence:update', payload);
+  for (const [sid, watched] of socketWatchMap.entries()) {
+    if (watched.has(userId)) io.to(sid).emit('presence:update', payload);
+  }
+}
+
+function setPresenceStatus(userId, status, lastActiveAt = now()) {
+  const p = getPresence(userId);
+  if (p.status === status && p.lastActiveAt === lastActiveAt) return;
+  p.status = status;
+  p.lastActiveAt = lastActiveAt;
+  p.lastBroadcast = Date.now();
+  emitPresenceToWatchers(userId);
+}
+
+function touchPresence(userId, forceIdle = false) {
+  const p = getPresence(userId);
+  p.lastActiveAt = now();
+  if (forceIdle) {
+    setPresenceStatus(userId, 'idle', p.lastActiveAt);
+    return;
+  }
+  const next = computePresenceStatus(p);
+  setPresenceStatus(userId, next, p.lastActiveAt);
+}
+
+function startOfflineGrace(userId) {
+  const p = getPresence(userId);
+  if (p.offlineTimer) clearTimeout(p.offlineTimer);
+  p.offlineTimer = setTimeout(() => {
+    const curr = getPresence(userId);
+    if (curr.connections <= 0) setPresenceStatus(userId, 'offline', curr.lastActiveAt || now());
+  }, OFFLINE_GRACE_MS);
+}
+
+function conversationId(a, b) { return [a, b].sort().join(':'); }
+
+function onlineStateOf(userId) {
+  const p = presenceState.get(userId);
+  if (!p) return { status: 'offline', lastActiveAt: '' };
+  return { status: p.status, lastActiveAt: p.lastActiveAt || '' };
+}
+
+setInterval(() => {
+  for (const [uid, p] of presenceState.entries()) {
+    if (p.connections > 0) {
+      const next = computePresenceStatus(p);
+      if (next !== p.status) setPresenceStatus(uid, next, p.lastActiveAt || now());
+    }
+  }
+}, 5000);
+
+
 async function handleApi(req, res, urlObj) {
   const db = readDb();
   const { pathname, searchParams } = urlObj;
@@ -198,6 +286,22 @@ async function handleApi(req, res, urlObj) {
       const token = createSession(db, user.id);
       writeDb(db);
       return json(res, 200, { user: { ...publicUser(user), token } });
+    }
+
+
+    if (req.method === 'POST' && pathname === '/api/auth/logout') {
+      if (!authUser) return json(res, 200, { ok: true });
+      const auth = String(req.headers.authorization || '');
+      const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+      db.sessions = (db.sessions || []).filter((s) => s.token !== token);
+      writeDb(db);
+      if (io) io.to(`user:${authUser.id}`).emit('presence:forceOffline');
+      const p = getPresence(authUser.id);
+      p.connections = 0;
+      p.sockets.clear();
+      setPresenceStatus(authUser.id, 'offline', now());
+      if (io) io.in(`user:${authUser.id}`).disconnectSockets(true);
+      return json(res, 200, { ok: true });
     }
 
     if (req.method === 'GET' && pathname === '/api/users/search') {
@@ -451,6 +555,31 @@ async function handleApi(req, res, urlObj) {
       return json(res, 200, { notifications: db.notifications.filter((n) => n.userId === userId).slice(0, 30) });
     }
 
+
+    if (req.method === 'GET' && pathname === '/api/messages/conversations') {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
+      const userId = authUser.id;
+      const friendIds = db.friendships.flatMap((f) => (f.a === userId ? [f.b] : (f.b === userId ? [f.a] : [])));
+      const conversations = friendIds.map((fid) => {
+        const friend = db.users.find((u) => u.id === fid);
+        const msgs = db.messages
+          .filter((m) => (m.from === userId && m.to === fid) || (m.from === fid && m.to === userId))
+          .slice()
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const last = msgs[0];
+        const unreadCount = msgs.filter((m) => m.to === userId && !(m.readBy || []).includes(userId)).length;
+        const presence = onlineStateOf(fid);
+        return {
+          user: publicUser(friend),
+          lastPreview: last?.content || (last?.imageData ? '📷 Image' : ''),
+          lastMessageAt: last?.createdAt || '',
+          unreadCount,
+          presence
+        };
+      }).sort((a, b) => (b.lastMessageAt || '').localeCompare(a.lastMessageAt || ''));
+      return json(res, 200, { conversations });
+    }
+
     if (req.method === 'POST' && pathname === '/api/messages') {
       if (!authUser) return json(res, 401, { error: 'Unauthorized' });
       const body = await readBody(req);
@@ -461,9 +590,14 @@ async function handleApi(req, res, urlObj) {
       const content = sanitize(body.content, 300);
       const imageData = validateImageDataUrl(body.imageData || '');
       if (!content && !imageData) return json(res, 400, { error: 'Message is empty' });
-      db.messages.push({ id: uid(), from: from.id, to: to.id, content, imageData, createdAt: now() });
+      const message = { id: uid(), from: from.id, to: to.id, content, imageData, readBy: [from.id], createdAt: now() };
+      db.messages.push(message);
       notify(db, to.id, 'message', `${from.username} sent you a message.`);
       writeDb(db);
+      if (io) {
+        io.to(`user:${from.id}`).emit('dm:newMessage', message);
+        io.to(`user:${to.id}`).emit('dm:newMessage', message);
+      }
       return json(res, 200, { ok: true });
     }
 
@@ -473,6 +607,14 @@ async function handleApi(req, res, urlObj) {
       const targetId = searchParams.get('targetId');
       if (!areFriends(db, userId, targetId)) return json(res, 403, { error: 'Messaging is available for friends only' });
       const messages = db.messages.filter((m) => (m.from === userId && m.to === targetId) || (m.from === targetId && m.to === userId));
+      let changed = false;
+      for (const m of messages) {
+        if (m.to === userId) {
+          m.readBy = Array.isArray(m.readBy) ? m.readBy : [];
+          if (!m.readBy.includes(userId)) { m.readBy.push(userId); changed = true; }
+        }
+      }
+      if (changed) writeDb(db);
       return json(res, 200, { messages });
     }
 
@@ -525,6 +667,85 @@ const server = http.createServer(async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   if (urlObj.pathname.startsWith('/api/')) return handleApi(req, res, urlObj);
   return serveStatic(req, res, urlObj.pathname);
+});
+
+io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || '';
+  const db = readDb();
+  const user = getUserByToken(db, token);
+  if (!user) return next(new Error('Unauthorized'));
+  socket.user = user;
+  return next();
+});
+
+io.on('connection', (socket) => {
+  const userId = socket.user.id;
+  socket.join(`user:${userId}`);
+  socketUserMap.set(socket.id, userId);
+
+  const p = getPresence(userId);
+  if (p.offlineTimer) { clearTimeout(p.offlineTimer); p.offlineTimer = null; }
+  p.connections += 1;
+  p.sockets.add(socket.id);
+  touchPresence(userId, false);
+
+  socket.on('presence:watch', ({ userIds = [] } = {}) => {
+    const clean = new Set(userIds.filter((id) => typeof id === 'string').slice(0, 100));
+    socketWatchMap.set(socket.id, clean);
+    for (const watchedId of clean) {
+      const pr = onlineStateOf(watchedId);
+      socket.emit('presence:update', { userId: watchedId, status: pr.status, lastActiveAt: pr.lastActiveAt });
+    }
+  });
+
+  let lastActivityAt = 0;
+  socket.on('presence:activity', ({ type = 'activity' } = {}) => {
+    const nowMs = Date.now();
+    if (type === 'activity' && nowMs - lastActivityAt < ACTIVITY_MIN_INTERVAL_MS) return;
+    lastActivityAt = nowMs;
+    touchPresence(userId, type === 'hidden');
+  });
+
+  socket.on('dm:join', ({ conversationId: convId, targetId } = {}) => {
+    if (typeof convId !== 'string' || !convId.includes(':')) return;
+    if (typeof targetId === 'string') {
+      const db = readDb();
+      if (!areFriends(db, userId, targetId)) return;
+    }
+    socket.join(`dm:${convId}`);
+    touchPresence(userId, false);
+  });
+
+  socket.on('dm:typing', ({ targetId, isTyping } = {}) => {
+    if (!targetId || targetId === userId) return;
+    const db = readDb();
+    if (!areFriends(db, userId, targetId)) return;
+    io.to(`user:${targetId}`).emit('dm:typing', { from: userId, isTyping: !!isTyping });
+  });
+
+  socket.on('presence:logout', () => {
+    const pp = getPresence(userId);
+    pp.connections = 0;
+    pp.sockets.clear();
+    setPresenceStatus(userId, 'offline', now());
+  });
+
+  socket.on('disconnect', () => {
+    socketUserMap.delete(socket.id);
+    socketWatchMap.delete(socket.id);
+    const curr = getPresence(userId);
+    curr.sockets.delete(socket.id);
+    curr.connections = Math.max(0, curr.connections - 1);
+    if (curr.connections <= 0) {
+      startOfflineGrace(userId);
+    } else {
+      touchPresence(userId, false);
+    }
+  });
 });
 
 ensureDb();

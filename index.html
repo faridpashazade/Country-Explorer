@@ -183,10 +183,24 @@
             <div class="dm-layout">
               <aside id="dm-friend-list" class="dm-friends"></aside>
               <section class="dm-chat">
-                <div id="dm-empty-state" class="dm-empty">Click a username to open chat.</div>
+                <div id="dm-empty-state" class="dm-empty">Hələ mesaj yoxdur — bir dostuna yaz 💬</div>
+                <header id="dm-chat-header" class="dm-chat-header hidden">
+                  <div class="dm-chat-user">
+                    <img id="dm-chat-avatar" class="mini-avatar" alt="chat user" />
+                    <div>
+                      <strong id="dm-chat-name">Select conversation</strong>
+                      <p id="dm-chat-status" class="small">offline</p>
+                    </div>
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="icon-action" title="Info">ℹ️</button>
+                    <button type="button" class="icon-action" title="Block">⛔</button>
+                  </div>
+                </header>
                 <div id="message-thread" class="stack dm-thread hidden"></div>
+                <p id="typing-indicator" class="small hidden">Typing...</p>
                 <form id="message-form" class="dm-composer hidden">
-                  <input id="message-input" maxlength="300" placeholder="Message..." />
+                  <textarea id="message-input" maxlength="300" placeholder="Mesaj yaz..."></textarea>
                   <button type="button" id="message-emoji" class="icon-btn" title="Emoji">😀</button>
                   <label for="message-image" class="icon-btn flag-btn" title="Upload image">🚩</label>
                   <input id="message-image" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
@@ -244,6 +258,7 @@
       </div>
     </section>
   </main>
+  <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

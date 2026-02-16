@@ -22,10 +22,16 @@ const state = {
   activeForumTopicId: '',
   editingPostId: '',
   profileActivity: { user: null, posts: [], forumPosts: [], forumComments: [] },
-  readNotifications: []
+  readNotifications: [],
+  conversations: [],
+  typingByUser: {},
+  presence: {}
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
+let socket = null;
+let activityThrottleUntil = 0;
+let typingTimeout = null;
 
 const el = (id) => document.getElementById(id);
 const decode = (txt) => { try { return atob(txt || ''); } catch { return ''; } };
@@ -51,6 +57,70 @@ function calcWeekStats() {
   const likes = myPosts.reduce((acc, p) => acc + (p.likes || []).length, 0);
   return { posts, replies, likes };
 }
+
+function dmConversationId(a, b) {
+  return [a, b].sort().join(':');
+}
+
+function getPresence(userId) {
+  const p = state.presence[userId] || { status: 'offline', lastActiveAt: '' };
+  return p;
+}
+
+function formatPresenceText(userId) {
+  const p = getPresence(userId);
+  if (p.status === 'online') return 'online';
+  if (p.status === 'idle') return 'idle';
+  if (!p.lastActiveAt) return 'offline';
+  return `last seen ${formatRelativeTime(p.lastActiveAt)}`;
+}
+
+function setupSocket() {
+  if (!window.io || !state.user?.token) return;
+  if (socket) socket.disconnect();
+  socket = window.io({ auth: { token: state.user.token } });
+
+  socket.on('presence:update', ({ userId, status, lastActiveAt }) => {
+    state.presence[userId] = { status, lastActiveAt };
+    if (state.view === 'messages') {
+      renderDmFriendList();
+      updateActiveChatHeader();
+    }
+  });
+
+  socket.on('dm:newMessage', (msg) => {
+    const target = state.activeChatFriendId;
+    if (!target) return;
+    const isForOpenChat = (msg.from === target && msg.to === state.user.id) || (msg.from === state.user.id && msg.to === target);
+    if (isForOpenChat) renderMessages();
+    renderDmFriendList();
+  });
+
+  socket.on('dm:typing', ({ from, isTyping }) => {
+    state.typingByUser[from] = isTyping;
+    if (from === state.activeChatFriendId) {
+      el('typing-indicator').classList.toggle('hidden', !isTyping);
+    }
+  });
+}
+
+function emitPresenceActivity(type = 'activity') {
+  if (!socket || !socket.connected) return;
+  const nowTs = Date.now();
+  if (type === 'activity' && nowTs < activityThrottleUntil) return;
+  if (type === 'activity') activityThrottleUntil = nowTs + 1200;
+  socket.emit('presence:activity', { type });
+}
+
+function bindPresenceActivity() {
+  ['mousemove', 'keydown', 'scroll', 'click'].forEach((evt) => {
+    window.addEventListener(evt, () => emitPresenceActivity('activity'), { passive: true });
+  });
+  document.addEventListener('visibilitychange', () => {
+    emitPresenceActivity(document.hidden ? 'hidden' : 'activity');
+  });
+}
+
 
 async function api(path, options = {}) {
   const token = state.user?.token || '';
@@ -149,6 +219,11 @@ async function loginUser(e) {
 }
 
 function logout() {
+  if (socket) {
+    socket.emit('presence:logout');
+    socket.disconnect();
+    socket = null;
+  }
   state.user = null;
   localStorage.removeItem(SESSION_KEY);
   toggleAuth(false);
@@ -519,45 +594,85 @@ function renderNetwork() {
 function renderDmFriendList() {
   const wrap = el('dm-friend-list');
   wrap.innerHTML = '';
-  if (!state.friends.length) {
-    wrap.textContent = 'No friends yet.';
+  if (!state.conversations.length) {
+    wrap.innerHTML = '<div class="dm-empty">Hələ mesaj yoxdur — bir dostuna yaz 💬</div>';
+    if (socket?.connected) socket.emit('presence:watch', { userIds: [] });
     return;
   }
-  state.friends.forEach((f) => {
+
+  const watchIds = [];
+  state.conversations.forEach((c) => {
+    const p = getPresence(c.user.id);
+    watchIds.push(c.user.id);
     const btn = document.createElement('button');
-    btn.className = `dm-friend-item ${state.activeChatFriendId === f.id ? 'active' : ''}`;
+    btn.className = `dm-friend-item ${state.activeChatFriendId === c.user.id ? 'active' : ''}`;
     btn.type = 'button';
-    btn.textContent = `@${f.username}`;
-    btn.onclick = async () => { state.activeChatFriendId = f.id; await renderMessages(); };
+    btn.innerHTML = `
+      <div class="dm-conv-head">
+        <span class="dm-presence-dot ${p.status}"></span>
+        <strong>@${c.user.username}</strong>
+        <span class="small">${c.lastMessageAt ? formatRelativeTime(c.lastMessageAt) : ''}</span>
+      </div>
+      <p class="small dm-preview">${c.lastPreview || 'Yeni söhbət başlat'}</p>
+      ${c.unreadCount ? `<span class="dm-unread">${c.unreadCount}</span>` : ''}
+    `;
+    btn.onclick = async () => {
+      state.activeChatFriendId = c.user.id;
+      if (socket?.connected) socket.emit('dm:join', { conversationId: dmConversationId(state.user.id, c.user.id), targetId: c.user.id });
+      await renderMessages();
+    };
     wrap.appendChild(btn);
   });
+  if (socket?.connected) socket.emit('presence:watch', { userIds: watchIds });
+}
+
+function updateActiveChatHeader() {
+  const header = el('dm-chat-header');
+  if (!state.activeChatFriendId) {
+    header.classList.add('hidden');
+    return;
+  }
+  const conv = state.conversations.find((c) => c.user.id === state.activeChatFriendId);
+  if (!conv) return;
+  el('dm-chat-avatar').src = conv.user.profileImage || DEFAULT_AVATAR;
+  el('dm-chat-name').textContent = `@${conv.user.username}`;
+  el('dm-chat-status').textContent = formatPresenceText(conv.user.id);
+  header.classList.remove('hidden');
 }
 
 async function renderMessages() {
-  renderDmFriendList();
   const thread = el('message-thread');
   const form = el('message-form');
   const empty = el('dm-empty-state');
   const imageName = el('message-image-name');
-
   thread.innerHTML = '';
+
+  const convData = await api('/api/messages/conversations');
+  state.conversations = convData.conversations;
+  renderDmFriendList();
+
   if (!state.activeChatFriendId) {
+    empty.textContent = 'Conversation seç — real-time chat burada açılacaq.';
     empty.classList.remove('hidden');
     thread.classList.add('hidden');
     form.classList.add('hidden');
     imageName.classList.add('hidden');
+    updateActiveChatHeader();
     return;
   }
 
   empty.classList.add('hidden');
   thread.classList.remove('hidden');
   form.classList.remove('hidden');
+  updateActiveChatHeader();
 
   const data = await api(`/api/messages/thread?targetId=${state.activeChatFriendId}`);
   state.messages = data.messages;
+
   state.messages.forEach((m) => {
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${m.from === state.user.id ? 'mine' : ''}`;
+    const meta = m.from === state.user.id ? (m.readBy?.includes(state.activeChatFriendId) ? 'read ✓✓' : 'sent ✓') : formatRelativeTime(m.createdAt);
     bubble.innerHTML = `<strong>${m.from === state.user.id ? 'Me' : 'Friend'}</strong>`;
     if (m.content) {
       const text = document.createElement('p');
@@ -571,8 +686,15 @@ async function renderMessages() {
       img.className = 'message-image';
       bubble.appendChild(img);
     }
+    const time = document.createElement('span');
+    time.className = 'small';
+    time.textContent = `${formatRelativeTime(m.createdAt)} • ${meta}`;
+    bubble.appendChild(time);
     thread.appendChild(bubble);
   });
+
+  thread.scrollTop = thread.scrollHeight;
+  el('typing-indicator').classList.toggle('hidden', !state.typingByUser[state.activeChatFriendId]);
 }
 
 
@@ -775,6 +897,7 @@ async function renderApp(resetFeed = false) {
   await renderForumPosts();
   await renderProfileView();
   await renderMessages();
+  if (!socket && state.user?.token) setupSocket();
 }
 
 // events
@@ -919,10 +1042,26 @@ el('post-form').addEventListener('submit', async (e) => {
   }
 });
 
+el('message-input').addEventListener('keydown', async (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    el('message-form').requestSubmit();
+    return;
+  }
+  if (socket?.connected && state.activeChatFriendId) {
+    socket.emit('dm:typing', { targetId: state.activeChatFriendId, isTyping: true });
+    if (typingTimeout) clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      socket.emit('dm:typing', { targetId: state.activeChatFriendId, isTyping: false });
+    }, 1200);
+  }
+});
+
 el('message-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const content = sanitize(el('message-input').value, 300);
+    const raw = el('message-input').value;
+    const content = sanitize(raw, 300);
     const file = el('message-image').files[0];
     ensureSafeImageFile(file);
     const imageData = file ? await fileToDataUrl(file) : '';
@@ -931,6 +1070,10 @@ el('message-form').addEventListener('submit', async (e) => {
       method: 'POST',
       body: JSON.stringify({ to: state.activeChatFriendId, content, imageData })
     });
+    if (socket?.connected) {
+      socket.emit('dm:typing', { targetId: state.activeChatFriendId, isTyping: false });
+      socket.emit('presence:activity', { type: 'activity' });
+    }
     e.target.reset();
     el('message-image-name').textContent = 'No file selected';
     el('message-image-name').classList.add('hidden');
@@ -1003,4 +1146,5 @@ el('settings-form').addEventListener('submit', async (e) => {
 });
 
 connectEmojiButtons();
+bindPresenceActivity();
 renderApp(true);
