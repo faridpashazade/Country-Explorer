@@ -75,6 +75,10 @@ function canAccessForumPost(db, post, viewerId) {
   return areFriends(db, post.authorId, viewerId);
 }
 
+function isAdmin(user) {
+  return Boolean(user && user.isAdmin === true);
+}
+
 function setSecurityHeaders(res, contentType = 'application/json; charset=utf-8') {
   return {
     'Content-Type': contentType,
@@ -433,6 +437,30 @@ async function handleApi(req, res, urlObj) {
       if (post.authorId !== user.id) notify(db, post.authorId, 'comment', `${user.username} replied to your post.`);
       writeDb(db);
       return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'DELETE' && pathname.match(/^\/api\/posts\/[^/]+\/replies\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
+      const [, , , postId, , replyId] = pathname.split('/');
+      const post = db.posts.find((p) => p.id === postId);
+      if (!post) return json(res, 404, { error: 'Post not found' });
+
+      post.comments = Array.isArray(post.comments) ? post.comments : [];
+      const replyIndex = post.comments.findIndex((c) => c.id === replyId && c.kind === 'reply');
+      if (replyIndex < 0) return json(res, 404, { error: 'Reply not found' });
+
+      const reply = post.comments[replyIndex];
+      if (reply.userId !== authUser.id && !isAdmin(authUser)) {
+        return json(res, 403, { error: 'Only reply owner or admin can delete' });
+      }
+
+      post.comments.splice(replyIndex, 1);
+      if (Number.isInteger(post.replyCount)) {
+        post.replyCount = Math.max(0, post.replyCount - 1);
+      }
+
+      writeDb(db);
+      return json(res, 200, { ok: true, deletedReplyId: replyId });
     }
 
 

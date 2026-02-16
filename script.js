@@ -167,6 +167,7 @@ function positionFloatingDropdown(anchorEl, panelEl, width = 320) {
   panelEl.style.width = `${panelWidth}px`;
 }
 
+
 function showToast(msg, isErr = false) {
   const t = el('ui-toast');
   if (!t) return;
@@ -175,6 +176,45 @@ function showToast(msg, isErr = false) {
   t.classList.toggle('error', isErr);
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(() => t.classList.add('hidden'), 1800);
+}
+
+async function openConfirmModal(message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'confirm-modal';
+    modal.innerHTML = `<p>${message}</p>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'confirm-modal-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel';
+
+    const yesBtn = document.createElement('button');
+    yesBtn.type = 'button';
+    yesBtn.className = 'danger';
+    yesBtn.textContent = 'Yes';
+
+    const close = (result) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    cancelBtn.onclick = () => close(false);
+    yesBtn.onclick = () => close(true);
+    overlay.onclick = (e) => {
+      if (e.target === overlay) close(false);
+    };
+
+    actions.append(cancelBtn, yesBtn);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  });
 }
 
 function toggleAuth(showApp) {
@@ -450,6 +490,80 @@ function buildReplyBox(postId) {
   return wrap;
 }
 
+function removeReplyFromState(postId, replyId) {
+  const post = state.posts.find((p) => p.id === postId);
+  if (!post) return null;
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+  const idx = comments.findIndex((c) => c.id === replyId && c.kind === 'reply');
+  if (idx < 0) return null;
+  const [removed] = comments.splice(idx, 1);
+  return { post, removed, idx };
+}
+
+function restoreReplyInState(postId, snapshot) {
+  if (!snapshot) return;
+  const post = state.posts.find((p) => p.id === postId);
+  if (!post) return;
+  post.comments = Array.isArray(post.comments) ? post.comments : [];
+  post.comments.splice(snapshot.idx, 0, snapshot.removed);
+}
+
+function buildReplyActionsMenu(postId, reply) {
+  const menuWrap = document.createElement('div');
+  menuWrap.className = 'reply-menu';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'reply-menu-trigger';
+  trigger.textContent = '⋯';
+  trigger.title = 'Reply actions';
+
+  const panel = document.createElement('div');
+  panel.className = 'reply-menu-panel hidden';
+
+  const closePanel = () => panel.classList.add('hidden');
+
+  if (reply.userId === state.user.id) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'reply-menu-item danger';
+    deleteBtn.textContent = 'Delete reply';
+    deleteBtn.onclick = async (e) => {
+      e.stopPropagation();
+      closePanel();
+      const confirmed = await openConfirmModal('Bu reply silinsin?');
+      if (!confirmed) return;
+
+      const snapshot = removeReplyFromState(postId, reply.id);
+      if (!snapshot) return;
+      renderFeed();
+
+      try {
+        await api(`/api/posts/${postId}/replies/${reply.id}`, { method: 'DELETE' });
+      } catch (err) {
+        restoreReplyInState(postId, snapshot);
+        renderFeed();
+        showToast(`Silinmə alınmadı: ${err.message}`, true);
+      }
+    };
+    panel.appendChild(deleteBtn);
+  } else {
+    const noop = document.createElement('div');
+    noop.className = 'reply-menu-item muted';
+    noop.textContent = 'No actions';
+    panel.appendChild(noop);
+  }
+
+  trigger.onclick = (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hidden');
+  };
+
+
+  menuWrap.append(trigger, panel);
+  return menuWrap;
+}
+
 function renderFeed() {
   el('feed-title').textContent = state.selectedProfile ? `Posts by @${state.selectedProfile.username}` : 'Community Feed';
   const wrap = el('post-list');
@@ -589,7 +703,16 @@ function renderFeed() {
           const ce = document.createElement('div');
           ce.className = 'comment nested-comment';
           ce.style.marginLeft = `${12 + (i % 3) * 14}px`;
-          ce.innerHTML = `<strong>${c.user?.username || 'Unknown'}</strong> <span class="small">• ${formatRelativeTime(c.createdAt)}</span><p>${c.content}</p>`;
+
+          const header = document.createElement('div');
+          header.className = 'reply-head';
+          header.innerHTML = `<strong>${c.user?.username || 'Unknown'}</strong> <span class="small">• ${formatRelativeTime(c.createdAt)}</span>`;
+          header.appendChild(buildReplyActionsMenu(post.id, c));
+
+          const body = document.createElement('p');
+          body.textContent = c.content;
+
+          ce.append(header, body);
           threadWrap.appendChild(ce);
         });
         postEl.appendChild(threadWrap);
