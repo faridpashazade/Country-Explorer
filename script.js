@@ -25,7 +25,10 @@ const state = {
   readNotifications: [],
   conversations: [],
   typingByUser: {},
-  presence: {}
+  presence: {},
+  pendingOutgoing: new Set(),
+  openThreads: new Set(),
+  forumTab: 'posts'
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -151,6 +154,16 @@ function setNetworkMessage(msg, isErr = false) {
   m.textContent = msg;
 }
 
+function showToast(msg, isErr = false) {
+  const t = el('ui-toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  t.classList.toggle('error', isErr);
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.add('hidden'), 1800);
+}
+
 function toggleAuth(showApp) {
   el('auth-panel').classList.toggle('hidden', showApp);
   el('app-panel').classList.toggle('hidden', !showApp);
@@ -218,7 +231,13 @@ async function loginUser(e) {
   }
 }
 
-function logout() {
+async function logout() {
+  try {
+    const token = state.user?.token;
+    if (token) {
+      await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+    }
+  } catch {}
   if (socket) {
     socket.emit('presence:logout');
     socket.disconnect();
@@ -303,12 +322,19 @@ function renderTopics() {
 }
 
 async function sendFriendRequest(targetId) {
+  state.pendingOutgoing.add(targetId);
+  renderNetwork();
   try {
     await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ to: targetId }) });
     setNetworkMessage('Friend request sent ✅');
+    showToast('Friend request sent');
     await renderApp(true);
   } catch (err) {
+    if ((err.message || '').toLowerCase().includes('pending')) state.pendingOutgoing.add(targetId);
+    else state.pendingOutgoing.delete(targetId);
     setNetworkMessage(err.message, true);
+    showToast(err.message, true);
+    renderNetwork();
   }
 }
 
@@ -520,12 +546,42 @@ function renderFeed() {
       replyWrap.classList.toggle('open');
     };
 
-    (post.comments || []).forEach((c) => {
+    const allComments = post.comments || [];
+    const baseComments = allComments.filter((c) => c.kind !== 'reply');
+    const threadReplies = allComments.filter((c) => c.kind === 'reply');
+
+    baseComments.forEach((c) => {
       const ce = document.createElement('div');
       ce.className = 'comment';
       ce.innerHTML = `<strong>${c.user?.username || 'Unknown'}</strong> <span class="small">• ${formatRelativeTime(c.createdAt)}</span><p>${c.content}</p>`;
       postEl.appendChild(ce);
     });
+
+    if (threadReplies.length) {
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'thread-toggle';
+      const isOpen = state.openThreads.has(post.id);
+      toggleBtn.textContent = isOpen ? 'Hide thread' : `View thread (${threadReplies.length})`;
+      toggleBtn.onclick = () => {
+        if (state.openThreads.has(post.id)) state.openThreads.delete(post.id);
+        else state.openThreads.add(post.id);
+        renderFeed();
+      };
+      postEl.appendChild(toggleBtn);
+
+      if (isOpen) {
+        const threadWrap = document.createElement('div');
+        threadWrap.className = 'thread-wrap';
+        threadReplies.forEach((c, i) => {
+          const ce = document.createElement('div');
+          ce.className = 'comment nested-comment';
+          ce.style.marginLeft = `${12 + (i % 3) * 14}px`;
+          ce.innerHTML = `<strong>${c.user?.username || 'Unknown'}</strong> <span class="small">• ${formatRelativeTime(c.createdAt)}</span><p>${c.content}</p>`;
+          threadWrap.appendChild(ce);
+        });
+        postEl.appendChild(threadWrap);
+      }
+    }
 
     postEl.appendChild(replyWrap);
     wrap.appendChild(postEl);
@@ -551,10 +607,17 @@ function renderNetwork() {
     actions.appendChild(viewBtn);
 
     const btn = document.createElement('button');
-    btn.textContent = isFriend ? 'Friends' : 'Add Friend';
-    btn.disabled = isFriend;
+    const isPending = state.pendingOutgoing.has(u.id);
+    btn.textContent = isFriend ? 'Friends' : (isPending ? 'Pending' : 'Add Friend');
+    btn.disabled = isFriend || isPending;
     btn.onclick = () => sendFriendRequest(u.id);
     actions.appendChild(btn);
+    if (!isFriend && isPending) {
+      const badge = document.createElement('span');
+      badge.className = 'pending-badge';
+      badge.textContent = 'Request already pending';
+      actions.appendChild(badge);
+    }
 
     result.appendChild(item);
   });
@@ -736,7 +799,7 @@ function renderForumTopics() {
   state.forumTopics.forEach((t) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `forum-topic-btn ${state.activeForumTopicId === t.id ? 'active' : ''}`;
+    btn.className = `forum-topic-btn ${state.activeForumTopicId === t.id ? 'active selected-topic-card' : ''}`;
     btn.innerHTML = `<strong>${t.name}</strong><span class="small">${t.description}</span>`;
     btn.onclick = async () => {
       state.activeForumTopicId = t.id;
@@ -747,10 +810,17 @@ function renderForumTopics() {
   });
 }
 
+function applyForumTab() {
+  el('forum-posts-tab').classList.toggle('hidden', state.forumTab !== 'posts');
+  el('forum-manage-tab').classList.toggle('hidden', state.forumTab !== 'manage');
+  document.querySelectorAll('.forum-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.forumTab === state.forumTab));
+}
+
 async function renderForumPosts() {
   const form = el('forum-post-form');
   const header = el('forum-topic-header');
   const list = el('forum-post-list');
+  applyForumTab();
   list.innerHTML = '';
 
   if (!state.activeForumTopicId) {
@@ -912,6 +982,13 @@ document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
   });
 });
 
+document.querySelectorAll('.forum-tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    state.forumTab = btn.dataset.forumTab;
+    applyForumTab();
+  });
+});
+
 el('register-form').addEventListener('submit', registerUser);
 el('login-form').addEventListener('submit', loginUser);
 el('logout-btn').addEventListener('click', logout);
@@ -1010,7 +1087,7 @@ document.addEventListener('click', (event) => {
     state.topSearchResults = [];
     renderTopSearchResults();
   }
-  if (!el('notification-dropdown').contains(event.target) && event.target !== el('notification-bell')) {
+  if (!event.target.closest('.notif-wrap')) {
     el('notification-dropdown').classList.add('hidden');
   }
 });

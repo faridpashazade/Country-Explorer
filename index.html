@@ -12,6 +12,7 @@
 </head>
 <body>
   <div class="bg-overlay"></div>
+  <div id="ui-toast" class="ui-toast hidden"></div>
   <main class="layout">
     <section id="auth-panel" class="card auth-card">
       <h1>CypheraX 😎</h1>
@@ -157,22 +158,30 @@
               <aside id="forum-topic-list" class="forum-topics"></aside>
               <section class="forum-panel">
                 <div id="forum-topic-header" class="forum-header">Select a topic to join discussion.</div>
-                <form id="forum-topic-form" class="stack">
-                  <label>Create new topic</label>
-                  <input id="forum-topic-name" maxlength="60" placeholder="Topic name" />
-                  <textarea id="forum-topic-description" maxlength="300" placeholder="Short topic description..."></textarea>
-                  <button type="submit">Add topic</button>
-                </form>
-                <form id="forum-post-form" class="stack hidden">
-                  <textarea id="forum-post-input" maxlength="3000" placeholder="Write your forum opinion..."></textarea>
-                  <label>Visibility</label>
-                  <select id="forum-visibility">
-                    <option value="public">Everyone can see and comment</option>
-                    <option value="friends">Only friends can see and comment</option>
-                  </select>
-                  <button type="submit">Share in topic</button>
-                </form>
-                <div id="forum-post-list" class="stack"></div>
+                <div class="forum-tabs">
+                  <button type="button" class="forum-tab-btn active" data-forum-tab="posts">Posts</button>
+                  <button type="button" class="forum-tab-btn" data-forum-tab="manage">Manage topic</button>
+                </div>
+                <div id="forum-posts-tab">
+                  <form id="forum-post-form" class="stack hidden">
+                    <textarea id="forum-post-input" maxlength="3000" placeholder="Write your forum opinion..."></textarea>
+                    <label>Visibility</label>
+                    <select id="forum-visibility">
+                      <option value="public">🌐 Public — everyone can see and comment</option>
+                      <option value="friends">👥 Friends-only — only friends can see and comment</option>
+                    </select>
+                    <button type="submit">Share post</button>
+                  </form>
+                  <div id="forum-post-list" class="stack"></div>
+                </div>
+                <div id="forum-manage-tab" class="hidden">
+                  <form id="forum-topic-form" class="stack">
+                    <label>Create new topic</label>
+                    <input id="forum-topic-name" maxlength="60" placeholder="Topic name" />
+                    <textarea id="forum-topic-description" maxlength="300" placeholder="Short topic description..."></textarea>
+                    <button type="submit">Add topic</button>
+                  </form>
+                </div>
               </section>
             </div>
           </div>
@@ -239,18 +248,32 @@
 
           <div id="settings-view" class="view hidden">
             <h3>Settings</h3>
-            <form id="settings-form" class="stack">
-              <label>Upload Avatar</label>
-              <label for="profile-image-file" class="file-upload-btn">🚩 Avatar upload</label>
-              <input id="profile-image-file" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-              <span id="profile-image-name" class="small file-name">No file selected</span>
-              <label>Status</label>
-              <input id="status-input" maxlength="120" placeholder="Blue Team ready" />
-              <label>Change Password</label>
-              <input id="new-password" type="password" minlength="8" placeholder="New password" />
-              <label>Change Email (only once)</label>
-              <input id="new-email" type="email" placeholder="new@email.com" />
-              <button type="submit">Save Settings</button>
+            <form id="settings-form" class="stack settings-grid">
+              <section class="card-soft settings-group">
+                <h4>Profile</h4>
+                <label>Upload Avatar</label>
+                <label for="profile-image-file" class="file-upload-btn">🚩 Avatar upload</label>
+                <input id="profile-image-file" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <span id="profile-image-name" class="small file-name">No file selected</span>
+                <label>Status</label>
+                <input id="status-input" maxlength="120" placeholder="Blue Team ready" />
+              </section>
+              <section class="card-soft settings-group">
+                <h4>Security</h4>
+                <label>Change Password</label>
+                <input id="new-password" type="password" minlength="8" placeholder="New password" />
+              </section>
+              <section class="card-soft settings-group">
+                <h4>Email</h4>
+                <label>Change Email (only once)</label>
+                <input id="new-email" type="email" placeholder="new@email.com" />
+              </section>
+              <section class="card-soft settings-group">
+                <h4>Privacy</h4>
+                <label class="row"><span>Show friend count</span><input id="privacy-friend-count" type="checkbox" checked /></label>
+                <p class="small">UI preference only.</p>
+              </section>
+              <button class="settings-save" type="submit">Save Settings</button>
             </form>
             <p id="settings-message" class="message"></p>
           </div>
