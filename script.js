@@ -43,6 +43,13 @@ function setAuthMsg(msg, isErr = false) {
   m.textContent = msg;
 }
 
+function setNetworkMessage(msg, isErr = false) {
+  const m = el('network-message');
+  if (!m) return;
+  m.style.color = isErr ? '#ff9db0' : '#9fffb0';
+  m.textContent = msg;
+}
+
 function toggleAuth(showApp) {
   el('auth-panel').classList.toggle('hidden', showApp);
   el('app-panel').classList.toggle('hidden', !showApp);
@@ -179,8 +186,13 @@ function renderTopics() {
 }
 
 async function sendFriendRequest(targetId) {
-  await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ from: state.user.id, to: targetId }) });
-  await renderApp(false);
+  try {
+    await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ from: state.user.id, to: targetId }) });
+    setNetworkMessage('Friend request sent ✅');
+    await renderApp(true);
+  } catch (err) {
+    setNetworkMessage(err.message, true);
+  }
 }
 
 async function openUserProfile(user) {
@@ -199,7 +211,7 @@ function renderSelectedProfileCard() {
   const user = state.selectedProfile;
   const isFriend = state.friends.some((f) => f.id === user.id);
   card.classList.remove('hidden');
-  card.innerHTML = `<div class="row"><span>@${user.username} profile view</span><div class="actions"></div></div>`;
+  card.innerHTML = `<div class="row"><div class="profile-mini"><img src="${user.profileImage || DEFAULT_AVATAR}" alt="${user.username}" class="mini-avatar" /><span>@${user.username} profile view • ${user.active ? 'active' : 'away'}</span></div><div class="actions"></div></div>`;
   const actions = card.querySelector('.actions');
 
   if (!isFriend) {
@@ -272,7 +284,7 @@ function buildReplyBox(postId) {
     const content = sanitize(input.value, 200);
     if (!content) return;
     await api(`/api/posts/${postId}/comment`, { method: 'POST', body: JSON.stringify({ userId: state.user.id, content, kind: 'reply' }) });
-    await renderApp(false);
+    await renderApp(true);
   };
   row.append(input, send);
   wrap.appendChild(row);
@@ -310,7 +322,7 @@ function renderFeed() {
     likeBtn.onclick = async (e) => {
       e.stopPropagation();
       await api(`/api/posts/${post.id}/like`, { method: 'POST', body: JSON.stringify({ userId: state.user.id }) });
-      await renderApp(false);
+      await renderApp(true);
     };
     actions.appendChild(likeBtn);
 
@@ -409,8 +421,24 @@ function renderNetwork() {
     txt.textContent = `${r.sender?.username || 'User'} sent request`;
     const a = document.createElement('button'); a.textContent = 'Accept';
     const b = document.createElement('button'); b.textContent = 'Reject'; b.className = 'danger';
-    a.onclick = async () => { await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'accept', userId: state.user.id }) }); await renderApp(false); };
-    b.onclick = async () => { await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'reject', userId: state.user.id }) }); await renderApp(false); };
+    a.onclick = async () => {
+      try {
+        await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'accept', userId: state.user.id }) });
+        setNetworkMessage('Friend request accepted ✅');
+        await renderApp(true);
+      } catch (err) {
+        setNetworkMessage(err.message, true);
+      }
+    };
+    b.onclick = async () => {
+      try {
+        await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'reject', userId: state.user.id }) });
+        setNetworkMessage('Friend request rejected');
+        await renderApp(true);
+      } catch (err) {
+        setNetworkMessage(err.message, true);
+      }
+    };
     item.append(txt, a, b);
     reqWrap.appendChild(item);
   });
@@ -684,7 +712,7 @@ el('toggle-active-btn').addEventListener('click', async () => {
   const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !state.user.active }) });
   state.user = data.user;
   localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
-  await renderApp(false);
+  await renderApp(true);
 });
 
 document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
@@ -695,7 +723,13 @@ el('mobile-menu-toggle').addEventListener('click', () => {
   el('mobile-menu-toggle').setAttribute('aria-expanded', willShow ? 'true' : 'false');
 });
 
-el('search-user').addEventListener('input', () => renderApp(false));
+el('search-user').addEventListener('input', async () => {
+  try {
+    const data = await api(`/api/users/search?userId=${encodeURIComponent(state.user.id)}&q=${encodeURIComponent(sanitize(el('search-user').value, 30))}`);
+    state.users = data.users;
+    renderNetwork();
+  } catch {}
+});
 el('top-search-user').addEventListener('input', onTopSearchInput);
 el('message-emoji').addEventListener('click', () => {
   const input = el('message-input');
@@ -750,7 +784,7 @@ el('post-form').addEventListener('submit', async (e) => {
       await api(`/api/posts/${state.editingPostId}`, { method: 'PUT', body: JSON.stringify({ userId: state.user.id, content }) });
       e.target.reset();
       setEditingState(null);
-      await renderApp(false);
+      await renderApp(true);
       return;
     }
 
@@ -790,6 +824,24 @@ el('message-form').addEventListener('submit', async (e) => {
 });
 
 
+el('forum-topic-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const name = sanitize(el('forum-topic-name').value, 60);
+    const description = sanitize(el('forum-topic-description').value, 300);
+    if (name.length < 3) return;
+    const data = await api('/api/forum/topics', {
+      method: 'POST',
+      body: JSON.stringify({ userId: state.user.id, name, description })
+    });
+    e.target.reset();
+    state.activeForumTopicId = data.topic.id;
+    await renderApp(true);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
 el('forum-post-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
@@ -827,7 +879,7 @@ el('settings-form').addEventListener('submit', async (e) => {
     el('settings-message').textContent = 'Settings saved.';
     e.target.reset();
     el('profile-image-name').textContent = 'No file selected';
-    await renderApp(false);
+    await renderApp(true);
   } catch (err) {
     el('settings-message').textContent = err.message;
   }

@@ -279,6 +279,20 @@ async function handleApi(req, res, urlObj) {
       return json(res, 200, { topics: db.forumTopics });
     }
 
+    if (req.method === 'POST' && pathname === '/api/forum/topics') {
+      const body = await readBody(req);
+      const author = db.users.find((u) => u.id === body.userId);
+      const name = sanitize(body.name, 60);
+      const description = sanitize(body.description, 300);
+      if (!author) return json(res, 404, { error: 'User not found' });
+      if (name.length < 3) return json(res, 400, { error: 'Topic name is too short' });
+      if (db.forumTopics.some((t) => t.name.toLowerCase() === name.toLowerCase())) return json(res, 409, { error: 'Topic already exists' });
+      const topic = { id: uid(), name, description: description || 'Community created topic.' };
+      db.forumTopics.push(topic);
+      writeDb(db);
+      return json(res, 200, { topic });
+    }
+
     if (req.method === 'GET' && pathname.match(/^\/api\/forum\/topics\/[^/]+\/posts$/)) {
       const topicId = pathname.split('/')[4];
       const viewerId = searchParams.get('viewerId');

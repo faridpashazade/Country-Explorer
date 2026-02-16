@@ -124,6 +124,7 @@
           <div id="network-view" class="view hidden">
             <h3>Find IT users</h3>
             <input id="search-user" type="text" placeholder="Search registered users" />
+            <p id="network-message" class="message"></p>
             <div id="user-results" class="stack"></div>
             <h3>Friend Requests</h3>
             <div id="friend-requests" class="stack"></div>
@@ -136,6 +137,12 @@
               <aside id="forum-topic-list" class="forum-topics"></aside>
               <section class="forum-panel">
                 <div id="forum-topic-header" class="forum-header">Select a topic to join discussion.</div>
+                <form id="forum-topic-form" class="stack">
+                  <label>Create new topic</label>
+                  <input id="forum-topic-name" maxlength="60" placeholder="Topic name" />
+                  <textarea id="forum-topic-description" maxlength="300" placeholder="Short topic description..."></textarea>
+                  <button type="submit">Add topic</button>
+                </form>
                 <form id="forum-post-form" class="stack hidden">
                   <textarea id="forum-post-input" maxlength="3000" placeholder="Write your forum opinion..."></textarea>
                   <label>Visibility</label>

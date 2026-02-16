@@ -164,6 +164,25 @@ button.active, .nav-btn.active, .tab-btn.active { outline: 2px solid #83e8ff; }
 .send-btn { background: linear-gradient(90deg, #23afd4, #36d2f4); }
 
 
+
+#network-message { margin: 8px 0 4px; min-height: 20px; }
+.profile-mini { display: flex; align-items: center; gap: 10px; }
+.mini-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(88,223,195,.7); }
+
+.post, .item, .forum-post, .forum-topic-btn, .dm-friend-item {
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.post:hover, .item:hover, .forum-post:hover {
+  transform: translateY(-2px);
+  border-color: rgba(88,223,195,.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+}
+.forum-topic-btn:hover, .dm-friend-item:hover {
+  border-color: rgba(88,223,195,.55);
+  background: rgba(55,199,232,.24);
+}
+.clickable-user:hover { color: #bff7ff; text-decoration-color: rgba(191,247,255,.95); }
+
 @media (max-width: 900px) {
   .layout { padding: 10px; }
   #app-panel { min-height: calc(100vh - 20px); }
