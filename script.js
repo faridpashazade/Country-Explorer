@@ -1253,7 +1253,7 @@ async function renderApp(resetFeed = false) {
   if (!socket && state.user?.token) setupSocket();
 }
 
-// events
+function initEventBindings() {
 document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('[data-auth-tab]').forEach((b) => b.classList.remove('active'));
@@ -1275,28 +1275,27 @@ document.querySelectorAll('.forum-tab-btn').forEach((btn) => {
 el('register-form').addEventListener('submit', registerUser);
 el('login-form').addEventListener('submit', loginUser);
 el('logout-btn').addEventListener('click', logout);
-el('open-messages-btn').addEventListener('click', async () => {
-  switchView('messages');
-  await renderMessages();
-});
-
-el('toggle-active-btn').addEventListener('click', async () => {
-  const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !state.user.active }) });
-  state.user = { ...data.user, token: state.user?.token };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
-  await renderApp(true);
-});
-
-document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => {
-  switchView(btn.dataset.view);
+document.querySelectorAll('[data-nav]').forEach((btn) => btn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const targetView = btn.dataset.nav;
+  if (!targetView) return;
+  switchView(targetView);
   el('left-sidebar').classList.remove('drawer-open');
   el('mobile-nav').classList.add('hidden');
+  if (targetView === 'messages') await renderMessages();
 }));
-document.querySelectorAll('.top-icon-btn[data-view]').forEach((btn) => btn.addEventListener('click', async () => {
-  switchView(btn.dataset.view);
-  if (btn.dataset.view === 'messages') await renderMessages();
-}));
-el('mobile-menu-toggle').addEventListener('click', () => {
+const toggleActiveBtn = el('toggle-active-btn');
+if (toggleActiveBtn) {
+  toggleActiveBtn.addEventListener('click', async () => {
+    const data = await api(`/api/users/${state.user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !state.user.active }) });
+    state.user = { ...data.user, token: state.user?.token };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
+    await renderApp(true);
+  });
+}
+
+el('mobile-menu-toggle').addEventListener('click', (e) => {
+  e.preventDefault();
   const mobileNav = el('mobile-nav');
   const sidebar = el('left-sidebar');
   const willShow = mobileNav.classList.contains('hidden');
@@ -1569,6 +1568,11 @@ el('settings-form').addEventListener('submit', async (e) => {
   }
 });
 
-connectEmojiButtons();
-bindPresenceActivity();
-renderApp(true);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initEventBindings();
+  connectEmojiButtons();
+  bindPresenceActivity();
+  renderApp(true);
+});

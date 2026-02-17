@@ -802,3 +802,34 @@ body { background: radial-gradient(circle at 12% 8%, #132c4f, #071325 45%, #050d
   .composer-actions-right { width: 100%; justify-content: space-between; }
   .post-submit-gradient { width: 100%; }
 }
+
+/* click-through and stacking fixes for nav reliability */
+.bg-overlay,
+.bg-overlay::before,
+.bg-overlay::after {
+  pointer-events: none !important;
+  z-index: 0 !important;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1200 !important;
+  pointer-events: auto;
+}
+.topbar * { pointer-events: auto; }
+.topbar-actions,
+.top-icon-nav,
+#mobile-nav,
+.sidebar,
+.sidebar-nav-icons,
+.nav-btn,
+.top-icon-btn,
+button,
+[role="button"] {
+  pointer-events: auto;
+}
+.notif-wrap,
+.notif-dropdown,
+.search-results {
+  z-index: 1300 !important;
+}

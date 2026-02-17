@@ -58,30 +58,30 @@
         </div>
 
         <div class="topbar-actions top-icon-nav">
-          <button class="top-icon-btn active" data-view="feed" title="Feed" data-tooltip="Feed">📰</button>
-          <button class="top-icon-btn" data-view="network" title="Friends" data-tooltip="Friends">👥</button>
-          <button id="open-messages-btn" class="top-icon-btn" data-view="messages" title="Messages" data-tooltip="Messages">💬</button>
+          <button type="button" class="top-icon-btn active" data-view="feed" data-nav="feed" title="Feed" data-tooltip="Feed">📰</button>
+          <button type="button" class="top-icon-btn" data-view="network" data-nav="network" title="Friends" data-tooltip="Friends">👥</button>
+          <button type="button" id="open-messages-btn" class="top-icon-btn" data-view="messages" data-nav="messages" title="Messages" data-tooltip="Messages">💬</button>
           <div class="notif-wrap">
-            <button id="notification-bell" class="top-icon-btn" title="Notifications" data-tooltip="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
+            <button type="button" id="notification-bell" class="top-icon-btn" title="Notifications" data-tooltip="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
             <div id="notification-dropdown" class="notif-dropdown hidden">
               <div class="row notif-head"><strong>Notifications</strong><div class="actions"><button id="mark-all-read" type="button">Mark all as read</button><button id="view-all-notifications" type="button">View all</button></div></div>
               <div id="notification-dropdown-list" class="stack"></div>
             </div>
           </div>
-          <button class="top-icon-btn" data-view="settings" title="Settings" data-tooltip="Settings">⚙️</button>
-          <button id="logout-btn" class="top-icon-btn danger" title="Logout" data-tooltip="Logout">🚪</button>
-          <button id="mobile-menu-toggle" class="mobile-only top-icon-btn" aria-expanded="false" aria-controls="mobile-nav">☰</button>
+          <button type="button" class="top-icon-btn" data-view="settings" data-nav="settings" title="Settings" data-tooltip="Settings">⚙️</button>
+          <button type="button" id="logout-btn" class="top-icon-btn danger" title="Logout" data-tooltip="Logout">🚪</button>
+          <button type="button" id="mobile-menu-toggle" class="mobile-only top-icon-btn" aria-expanded="false" aria-controls="mobile-nav">☰</button>
         </div>
       </header>
 
       <nav id="mobile-nav" class="card mobile-nav hidden">
-        <button class="nav-btn" data-view="feed" title="Feed">📰</button>
-        <button class="nav-btn" data-view="network" title="Friends">👥</button>
-        <button class="nav-btn" data-view="messages" title="Messages">💬</button>
-        <button class="nav-btn" data-view="forum" title="Forum">🧠</button>
-        <button class="nav-btn" data-view="profile" title="Profile">👤</button>
-        <button class="nav-btn" data-view="notifications" title="Notifications">🔔</button>
-        <button class="nav-btn" data-view="settings" title="Settings">⚙️</button>
+        <button type="button" class="nav-btn" data-view="feed" data-nav="feed" title="Feed">📰</button>
+        <button type="button" class="nav-btn" data-view="network" data-nav="network" title="Friends">👥</button>
+        <button type="button" class="nav-btn" data-view="messages" data-nav="messages" title="Messages">💬</button>
+        <button type="button" class="nav-btn" data-view="forum" data-nav="forum" title="Forum">🧠</button>
+        <button type="button" class="nav-btn" data-view="profile" data-nav="profile" title="Profile">👤</button>
+        <button type="button" class="nav-btn" data-view="notifications" data-nav="notifications" title="Notifications">🔔</button>
+        <button type="button" class="nav-btn" data-view="settings" data-nav="settings" title="Settings">⚙️</button>
       </nav>
 
       <div class="grid">
@@ -104,13 +104,13 @@
             </div>
           </section>
           <nav class="sidebar-nav-icons">
-            <button class="nav-btn active" data-view="feed" title="Feed" data-tooltip="Feed">📰</button>
-            <button class="nav-btn" data-view="network" title="Friends" data-tooltip="Friends">👥</button>
-            <button class="nav-btn" data-view="messages" title="Messages" data-tooltip="Messages">💬</button>
-            <button class="nav-btn" data-view="forum" title="Forum" data-tooltip="Forum">🧠</button>
-            <button class="nav-btn" data-view="profile" title="Profile" data-tooltip="Profile">👤</button>
-            <button class="nav-btn" data-view="notifications" title="Notifications" data-tooltip="Notifications">🔔</button>
-            <button class="nav-btn" data-view="settings" title="Settings" data-tooltip="Settings">⚙️</button>
+            <button type="button" class="nav-btn active" data-view="feed" data-nav="feed" title="Feed" data-tooltip="Feed">📰</button>
+            <button type="button" class="nav-btn" data-view="network" data-nav="network" title="Friends" data-tooltip="Friends">👥</button>
+            <button type="button" class="nav-btn" data-view="messages" data-nav="messages" title="Messages" data-tooltip="Messages">💬</button>
+            <button type="button" class="nav-btn" data-view="forum" data-nav="forum" title="Forum" data-tooltip="Forum">🧠</button>
+            <button type="button" class="nav-btn" data-view="profile" data-nav="profile" title="Profile" data-tooltip="Profile">👤</button>
+            <button type="button" class="nav-btn" data-view="notifications" data-nav="notifications" title="Notifications" data-tooltip="Notifications">🔔</button>
+            <button type="button" class="nav-btn" data-view="settings" data-nav="settings" title="Settings" data-tooltip="Settings">⚙️</button>
           </nav>
         </aside>
 
@@ -293,7 +293,7 @@
           <div class="row"><h3>Online</h3></div>
           <input id="online-search" type="text" placeholder="Online dost axtar..." />
           <div id="online-friends-list" class="stack"></div>
-          <button id="online-add-friend-cta" class="hidden" type="button">Dost əlavə et</button>
+          <button type="button" id="online-add-friend-cta" class="hidden">Dost əlavə et</button>
         </aside>
 
       </div>
