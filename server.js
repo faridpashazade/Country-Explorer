@@ -618,7 +618,9 @@ async function handleApi(req, res, urlObj) {
       const content = sanitize(body.content, 300);
       const imageData = validateImageDataUrl(body.imageData || '');
       if (!content && !imageData) return json(res, 400, { error: 'Message is empty' });
-      const message = { id: uid(), from: from.id, to: to.id, content, imageData, readBy: [from.id], createdAt: now() };
+      const parentId = sanitize(body.parentId, 80);
+      if (parentId && !db.messages.some((m) => m.id === parentId)) return json(res, 400, { error: 'Parent message not found' });
+      const message = { id: uid(), from: from.id, to: to.id, content, imageData, parentId: parentId || '', readBy: [from.id], createdAt: now() };
       db.messages.push(message);
       notify(db, to.id, 'message', `${from.username} sent you a message.`);
       writeDb(db);
@@ -644,6 +646,19 @@ async function handleApi(req, res, urlObj) {
       }
       if (changed) writeDb(db);
       return json(res, 200, { messages });
+    }
+
+
+    if (req.method === 'DELETE' && pathname.match(/^\/api\/messages\/[^/]+$/)) {
+      if (!authUser) return json(res, 401, { error: 'Unauthorized' });
+      const messageId = pathname.split('/').pop();
+      const idx = db.messages.findIndex((m) => m.id === messageId);
+      if (idx < 0) return json(res, 404, { error: 'Message not found' });
+      const msg = db.messages[idx];
+      if (msg.from !== authUser.id && !isAdmin(authUser)) return json(res, 403, { error: 'Only owner can delete message' });
+      db.messages = db.messages.filter((m) => m.id !== messageId && m.parentId !== messageId);
+      writeDb(db);
+      return json(res, 200, { ok: true });
     }
 
     if (req.method === 'PUT' && pathname.match(/^\/api\/settings\/[^/]+$/)) {

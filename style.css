@@ -833,3 +833,39 @@ button,
 .search-results {
   z-index: 1300 !important;
 }
+
+/* refinements: top-only nav, profile icon, mobile chat composer */
+#top-profile-btn { padding: 0; overflow: hidden; }
+#top-profile-avatar { width: 30px; height: 30px; border-radius: 999px; object-fit: cover; }
+.forum-title-row { align-items: center; }
+#forum-create-quick { width: 40px; height: 40px; padding: 0; border-radius: 10px; }
+.sidebar-nav-icons { display: none !important; }
+
+.message-reply-ref {
+  font-size: 12px;
+  color: #9ec8eb;
+  background: rgba(120, 180, 230, 0.12);
+  border: 1px solid rgba(120, 180, 230, 0.2);
+  padding: 4px 8px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+@media (max-width: 767px) {
+  #messages-view .dm-chat {
+    padding-bottom: 94px;
+    position: relative;
+  }
+  #messages-view .dm-thread {
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  #messages-view .dm-composer {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 1350;
+  }
+}

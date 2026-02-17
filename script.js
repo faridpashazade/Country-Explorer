@@ -32,7 +32,8 @@ const state = {
   feedTagFilter: '',
   topicsExpanded: false,
   composerImageData: '',
-  sidebarCollapsed: localStorage.getItem('cypherax_sidebar_collapsed') !== '0'
+  sidebarCollapsed: localStorage.getItem('cypherax_sidebar_collapsed') !== '0',
+  replyToMessageId: ''
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
@@ -348,7 +349,10 @@ async function fetchAppMeta() {
 
 function renderHeader() {
   el('profile-name').textContent = state.user.username;
-  el('profile-preview').src = state.user.profileImage || DEFAULT_AVATAR;
+  const avatar = state.user.profileImage || DEFAULT_AVATAR;
+  el('profile-preview').src = avatar;
+  const topAvatar = el('top-profile-avatar');
+  if (topAvatar) topAvatar.src = avatar;
   el('active-status').textContent = `Status: ${state.user.active ? 'Active 🟢' : 'Away ⚪'}`;
   el('status-text').textContent = `Status message: ${decode(state.user.statusEncrypted) || 'Blue team mode'}`;
   el('status-input').value = decode(state.user.statusEncrypted) || '';
@@ -496,12 +500,16 @@ function renderSelectedProfileCard() {
 
   if (!isFriend) {
     const addBtn = document.createElement('button');
-    addBtn.textContent = 'Add Friend';
+    addBtn.className = 'icon-action';
+    addBtn.title = 'Send friend request';
+    addBtn.textContent = '👤➕';
     addBtn.onclick = () => sendFriendRequest(user.id);
     actions.appendChild(addBtn);
   } else {
     const msgBtn = document.createElement('button');
-    msgBtn.textContent = 'Message ✉️';
+    msgBtn.className = 'icon-action';
+    msgBtn.title = 'Message';
+    msgBtn.textContent = '✉️';
     msgBtn.onclick = async () => {
       state.activeChatFriendId = user.id;
       switchView('messages');
@@ -838,13 +846,17 @@ function renderNetwork() {
     item.querySelector('.clickable-user').onclick = () => openUserProfile(u);
 
     const viewBtn = document.createElement('button');
-    viewBtn.textContent = 'View Posts';
+    viewBtn.className = 'icon-action';
+    viewBtn.title = 'Open profile';
+    viewBtn.textContent = '👁️';
     viewBtn.onclick = () => openUserProfile(u);
     actions.appendChild(viewBtn);
 
     const btn = document.createElement('button');
     const isPending = state.pendingOutgoing.has(u.id);
-    btn.textContent = isFriend ? 'Friends' : (isPending ? 'Pending' : 'Add Friend');
+    btn.className = 'icon-action';
+    btn.title = isFriend ? 'Already friends' : (isPending ? 'Pending request' : 'Send friend request');
+    btn.textContent = isFriend ? '✅' : (isPending ? '⏳' : '👤➕');
     btn.disabled = isFriend || isPending;
     btn.onclick = () => sendFriendRequest(u.id);
     actions.appendChild(btn);
@@ -865,8 +877,8 @@ function renderNetwork() {
     item.className = 'item row';
     const txt = document.createElement('span');
     txt.textContent = `${r.sender?.username || 'User'} sent request`;
-    const a = document.createElement('button'); a.textContent = 'Accept';
-    const b = document.createElement('button'); b.textContent = 'Reject'; b.className = 'danger';
+    const a = document.createElement('button'); a.className = 'icon-action'; a.title = 'Accept'; a.textContent = '✅';
+    const b = document.createElement('button'); b.textContent = '❌'; b.title = 'Reject'; b.className = 'danger';
     a.onclick = async () => {
       try {
         await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId: r.id, action: 'accept', userId: state.user.id }) });
@@ -972,6 +984,10 @@ function renderOnlineSidebar() {
   });
 }
 
+async function deleteMessage(messageId) {
+  await api(`/api/messages/${messageId}`, { method: 'DELETE' });
+}
+
 async function renderMessages() {
   const thread = el('message-thread');
   const form = el('message-form');
@@ -1007,6 +1023,15 @@ async function renderMessages() {
     bubble.className = `message-bubble ${m.from === state.user.id ? 'mine' : ''}`;
     const meta = m.from === state.user.id ? (m.readBy?.includes(state.activeChatFriendId) ? 'read ✓✓' : 'sent ✓') : formatRelativeTime(m.createdAt);
     bubble.innerHTML = `<strong>${m.from === state.user.id ? 'Me' : 'Friend'}</strong>`;
+
+    if (m.parentId) {
+      const parent = state.messages.find((x) => x.id === m.parentId);
+      const ref = document.createElement('div');
+      ref.className = 'message-reply-ref';
+      ref.textContent = parent ? `↪ ${sanitize(parent.content || 'Image', 60)}` : '↪ Reply';
+      bubble.appendChild(ref);
+    }
+
     if (m.content) {
       const text = document.createElement('p');
       text.textContent = m.content;
@@ -1019,6 +1044,42 @@ async function renderMessages() {
       img.className = 'message-image';
       bubble.appendChild(img);
     }
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const replyBtn = document.createElement('button');
+    replyBtn.type = 'button';
+    replyBtn.className = 'icon-action';
+    replyBtn.textContent = '↩';
+    replyBtn.title = 'Reply';
+    replyBtn.onclick = () => {
+      state.replyToMessageId = m.id;
+      const inp = el('message-input');
+      inp.focus();
+      showToast('Reply mode enabled');
+    };
+    actions.appendChild(replyBtn);
+
+    if (m.from === state.user.id) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'icon-action danger';
+      delBtn.textContent = '🗑';
+      delBtn.title = 'Delete message';
+      delBtn.onclick = async () => {
+        try {
+          await deleteMessage(m.id);
+          state.replyToMessageId = state.replyToMessageId === m.id ? '' : state.replyToMessageId;
+          await renderMessages();
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      };
+      actions.appendChild(delBtn);
+    }
+
+    bubble.appendChild(actions);
+
     const time = document.createElement('span');
     time.className = 'small';
     time.textContent = `${formatRelativeTime(m.createdAt)} • ${meta}`;
@@ -1491,13 +1552,14 @@ el('message-form').addEventListener('submit', async (e) => {
     if (!state.activeChatFriendId || (!content && !imageData)) return;
     await api('/api/messages', {
       method: 'POST',
-      body: JSON.stringify({ to: state.activeChatFriendId, content, imageData })
+      body: JSON.stringify({ to: state.activeChatFriendId, content, imageData, parentId: state.replyToMessageId })
     });
     if (socket?.connected) {
       socket.emit('dm:typing', { targetId: state.activeChatFriendId, isTyping: false });
       socket.emit('presence:activity', { type: 'activity' });
     }
     e.target.reset();
+    state.replyToMessageId = '';
     el('message-image-name').textContent = 'No file selected';
     el('message-image-name').classList.add('hidden');
     await renderMessages();
@@ -1506,6 +1568,16 @@ el('message-form').addEventListener('submit', async (e) => {
   }
 });
 
+
+const forumQuickBtn = el('forum-create-quick');
+if (forumQuickBtn) {
+  forumQuickBtn.addEventListener('click', () => {
+    switchView('forum');
+    state.forumTab = 'manage';
+    applyForumTab();
+    el('forum-topic-name').focus();
+  });
+}
 
 el('forum-topic-form').addEventListener('submit', async (e) => {
   e.preventDefault();

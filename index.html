@@ -61,6 +61,7 @@
           <button type="button" class="top-icon-btn active" data-view="feed" data-nav="feed" title="Feed" data-tooltip="Feed">📰</button>
           <button type="button" class="top-icon-btn" data-view="network" data-nav="network" title="Friends" data-tooltip="Friends">👥</button>
           <button type="button" id="open-messages-btn" class="top-icon-btn" data-view="messages" data-nav="messages" title="Messages" data-tooltip="Messages">💬</button>
+          <button type="button" class="top-icon-btn" data-view="forum" data-nav="forum" title="Forum" data-tooltip="Forum">🧠</button>
           <div class="notif-wrap">
             <button type="button" id="notification-bell" class="top-icon-btn" title="Notifications" data-tooltip="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
             <div id="notification-dropdown" class="notif-dropdown hidden">
@@ -69,6 +70,7 @@
             </div>
           </div>
           <button type="button" class="top-icon-btn" data-view="settings" data-nav="settings" title="Settings" data-tooltip="Settings">⚙️</button>
+          <button type="button" id="top-profile-btn" class="top-icon-btn" data-view="profile" data-nav="profile" title="Profile" data-tooltip="Profile"><img id="top-profile-avatar" class="mini-avatar" alt="profile" /></button>
           <button type="button" id="logout-btn" class="top-icon-btn danger" title="Logout" data-tooltip="Logout">🚪</button>
           <button type="button" id="mobile-menu-toggle" class="mobile-only top-icon-btn" aria-expanded="false" aria-controls="mobile-nav">☰</button>
         </div>
@@ -103,15 +105,6 @@
               <div class="stat-item"><span class="small">Likes</span><strong id="stat-likes-week">0</strong></div>
             </div>
           </section>
-          <nav class="sidebar-nav-icons">
-            <button type="button" class="nav-btn active" data-view="feed" data-nav="feed" title="Feed" data-tooltip="Feed">📰</button>
-            <button type="button" class="nav-btn" data-view="network" data-nav="network" title="Friends" data-tooltip="Friends">👥</button>
-            <button type="button" class="nav-btn" data-view="messages" data-nav="messages" title="Messages" data-tooltip="Messages">💬</button>
-            <button type="button" class="nav-btn" data-view="forum" data-nav="forum" title="Forum" data-tooltip="Forum">🧠</button>
-            <button type="button" class="nav-btn" data-view="profile" data-nav="profile" title="Profile" data-tooltip="Profile">👤</button>
-            <button type="button" class="nav-btn" data-view="notifications" data-nav="notifications" title="Notifications" data-tooltip="Notifications">🔔</button>
-            <button type="button" class="nav-btn" data-view="settings" data-nav="settings" title="Settings" data-tooltip="Settings">⚙️</button>
-          </nav>
         </aside>
 
         <section class="card content">
@@ -163,7 +156,7 @@
 
 
           <div id="forum-view" class="view hidden">
-            <h3>Community Forum 🧠</h3>
+            <div class="row forum-title-row"><h3>Community Forum 🧠</h3><button type="button" id="forum-create-quick" class="icon-action" title="Create forum">＋</button></div>
             <div class="forum-layout">
               <aside id="forum-topic-list" class="forum-topics"></aside>
               <section class="forum-panel">
@@ -263,7 +256,7 @@
               <section class="card-soft settings-group">
                 <h4>Profile</h4>
                 <label>Upload Avatar</label>
-                <label for="profile-image-file" class="file-upload-btn">🚩 Avatar upload</label>
+                <label for="profile-image-file" class="file-upload-btn">📷</label>
                 <input id="profile-image-file" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
                 <span id="profile-image-name" class="small file-name">No file selected</span>
                 <label>Status</label>
