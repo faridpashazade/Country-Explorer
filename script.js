@@ -28,10 +28,15 @@ const state = {
   presence: {},
   pendingOutgoing: new Set(),
   openThreads: new Set(),
-  forumTab: 'posts'
+  forumTab: 'posts',
+  feedTagFilter: '',
+  topicsExpanded: false,
+  composerImageData: '',
+  sidebarCollapsed: localStorage.getItem('cypherax_sidebar_collapsed') !== '0'
 };
 
 const TOPICS = ['Blue Team', 'SOC', 'Threat Intel', 'Cloud Security', 'OWASP', 'Malware Analysis'];
+const POST_DRAFT_KEY = 'cypherax_post_draft_v1';
 let socket = null;
 let activityThrottleUntil = 0;
 let typingTimeout = null;
@@ -162,7 +167,9 @@ function positionFloatingDropdown(anchorEl, panelEl, width = 320) {
   let left = rect.right - panelWidth;
   left = Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12));
   panelEl.style.position = 'fixed';
-  panelEl.style.top = `${Math.min(window.innerHeight - 20, rect.bottom + 8)}px`;
+  const maxTop = Math.max(12, window.innerHeight - Math.min(window.innerHeight * 0.72, 420) - 16);
+  panelEl.style.top = `${Math.max(12, Math.min(maxTop, rect.bottom + 8))}px`;
+  panelEl.style.maxHeight = 'min(72vh, 420px)';
   panelEl.style.left = `${left}px`;
   panelEl.style.width = `${panelWidth}px`;
 }
@@ -229,6 +236,7 @@ function switchView(view) {
   document.querySelectorAll('.nav-btn, .top-icon-btn[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   if (window.innerWidth <= 900) {
     el('mobile-nav').classList.add('hidden');
+    el('left-sidebar').classList.remove('drawer-open');
     el('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
   }
 }
@@ -359,8 +367,11 @@ function renderHeader() {
 
 function renderTopics() {
   const wrap = el('topic-list');
+  const toggle = el('topic-toggle');
   wrap.innerHTML = '';
-  TOPICS.forEach((topic) => {
+  const isMobile = window.innerWidth <= 768;
+  const visibleTopics = isMobile && !state.topicsExpanded ? TOPICS.slice(0, 6) : TOPICS;
+  visibleTopics.forEach((topic) => {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'topic-chip';
@@ -369,9 +380,82 @@ function renderTopics() {
       const area = el('post-content');
       area.value = `${area.value} #${topic.replace(/\s+/g, '')}`.trim();
       area.focus();
+      persistComposerDraft();
+      updateComposerUiState();
     };
     wrap.appendChild(chip);
   });
+  if (toggle) {
+    const canToggle = isMobile && TOPICS.length > 6;
+    toggle.classList.toggle('hidden', !canToggle);
+    toggle.textContent = state.topicsExpanded ? 'Show less' : 'Show more';
+  }
+}
+
+
+function persistComposerDraft() {
+  const draft = {
+    content: sanitize(el('post-content')?.value || '', 500),
+    imageData: state.composerImageData || ''
+  };
+  if (!draft.content && !draft.imageData) {
+    localStorage.removeItem(POST_DRAFT_KEY);
+    return;
+  }
+  localStorage.setItem(POST_DRAFT_KEY, JSON.stringify(draft));
+}
+
+function hydrateComposerDraft() {
+  try {
+    const raw = localStorage.getItem(POST_DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    el('post-content').value = sanitize(draft.content || '', 500);
+    state.composerImageData = draft.imageData || '';
+    renderComposerImagePreview();
+  } catch {}
+}
+
+function discardComposerDraft() {
+  localStorage.removeItem(POST_DRAFT_KEY);
+  state.composerImageData = '';
+  el('post-content').value = '';
+  el('post-image').value = '';
+  renderComposerImagePreview();
+  updateComposerUiState();
+}
+
+function renderComposerImagePreview() {
+  const wrap = el('post-image-preview');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!state.composerImageData) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const img = document.createElement('img');
+  img.src = state.composerImageData;
+  img.alt = 'Post preview';
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'remove-preview-btn';
+  removeBtn.textContent = '✕';
+  removeBtn.onclick = () => {
+    state.composerImageData = '';
+    el('post-image').value = '';
+    renderComposerImagePreview();
+    persistComposerDraft();
+    updateComposerUiState();
+  };
+  wrap.append(img, removeBtn);
+}
+
+function updateComposerUiState() {
+  const content = sanitize(el('post-content')?.value || '', 500);
+  const submit = el('post-submit-btn');
+  if (!submit) return;
+  submit.disabled = !content && !state.composerImageData && !state.editingPostId;
 }
 
 async function sendFriendRequest(targetId) {
@@ -440,7 +524,7 @@ function renderSelectedProfileCard() {
 
 function renderFeedControls() {
   const btn = el('load-more-posts');
-  btn.classList.toggle('hidden', !state.hasMorePosts || state.selectedProfile);
+  btn.classList.toggle('hidden', !state.hasMorePosts || state.selectedProfile || !!state.feedTagFilter);
   btn.disabled = state.loadingPosts;
   btn.textContent = state.loadingPosts ? 'Loading...' : 'Load more';
 }
@@ -455,6 +539,7 @@ function setEditingState(post = null) {
     indicator.classList.add('hidden');
     cancelBtn.classList.add('hidden');
     submitBtn.textContent = 'Post';
+    updateComposerUiState();
     return;
   }
   state.editingPostId = post.id;
@@ -463,6 +548,7 @@ function setEditingState(post = null) {
   submitBtn.textContent = 'Save edit';
   el('post-content').value = post.content || '';
   el('post-content').focus();
+  updateComposerUiState();
 }
 
 function buildReplyBox(postId) {
@@ -569,7 +655,17 @@ function renderFeed() {
   const wrap = el('post-list');
   wrap.innerHTML = '';
 
-  state.posts.forEach((post) => {
+  const visiblePosts = state.feedTagFilter ? state.posts.filter((p) => String(p.content || '').toLowerCase().includes(state.feedTagFilter.toLowerCase())) : state.posts;
+
+  if (!visiblePosts.length) {
+    wrap.innerHTML = `<div class="item feed-empty"><div class="skeleton-line"></div><div class="skeleton-line"></div><p class="small">${state.feedTagFilter ? 'Bu hashtag ilə post tapılmadı.' : 'Hələ post yoxdur.'}</p><button id="first-post-cta" type="button">İlk postunu paylaş</button></div>`;
+    const cta = el('first-post-cta');
+    if (cta) cta.onclick = () => el('post-content').focus();
+    renderFeedControls();
+    return;
+  }
+
+  visiblePosts.forEach((post) => {
     const postEl = document.createElement('article');
     postEl.className = 'post';
 
@@ -587,6 +683,10 @@ function renderFeed() {
       const chip = document.createElement('span');
       chip.className = 'tag-chip';
       chip.textContent = tag;
+      chip.onclick = () => {
+        state.feedTagFilter = state.feedTagFilter === tag ? '' : tag;
+        renderFeed();
+      };
       tagRow.appendChild(chip);
     });
 
@@ -842,20 +942,27 @@ function updateActiveChatHeader() {
 function renderOnlineSidebar() {
   const wrap = el('online-friends-list');
   if (!wrap) return;
+  const q = sanitize(el('online-search')?.value || '', 30).toLowerCase();
   const onlineFriends = state.friends.filter((f) => {
     const ps = getPresence(f.id);
-    return ps.status === 'online' || ps.status === 'idle';
+    const active = ps.status === 'online' || ps.status === 'idle';
+    const matches = !q || f.username.toLowerCase().includes(q);
+    return active && matches;
   });
   wrap.innerHTML = '';
+  const cta = el('online-add-friend-cta');
   if (!onlineFriends.length) {
     wrap.innerHTML = '<div class="item small">Heç kim online deyil</div>';
+    if (cta) cta.classList.remove('hidden');
     return;
   }
+  if (cta) cta.classList.add('hidden');
   onlineFriends.forEach((f) => {
+    const ps = getPresence(f.id);
     const row = document.createElement('button');
     row.className = 'dm-friend-item';
     row.type = 'button';
-    row.innerHTML = `<div class="dm-conv-head"><span class="dm-presence-dot online"></span><strong>@${f.username}</strong></div>`;
+    row.innerHTML = `<div class="dm-conv-head"><span class="dm-presence-dot online"></span><strong>@${f.username}</strong><span class="small">${formatPresenceText(f.id)}</span></div><p class="small dm-preview">Direct message</p>`;
     row.onclick = async () => {
       state.activeChatFriendId = f.id;
       switchView('messages');
@@ -1130,6 +1237,9 @@ async function renderApp(resetFeed = false) {
   if (!state.selectedProfile) await fetchPosts(resetFeed);
   renderHeader();
   renderTopics();
+  hydrateComposerDraft();
+  updateComposerUiState();
+  el('left-sidebar').classList.toggle('collapsed', state.sidebarCollapsed);
   switchView(state.view);
   renderSelectedProfileCard();
   renderFeed();
@@ -1177,15 +1287,22 @@ el('toggle-active-btn').addEventListener('click', async () => {
   await renderApp(true);
 });
 
-document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+document.querySelectorAll('.nav-btn').forEach((btn) => btn.addEventListener('click', () => {
+  switchView(btn.dataset.view);
+  el('left-sidebar').classList.remove('drawer-open');
+  el('mobile-nav').classList.add('hidden');
+}));
 document.querySelectorAll('.top-icon-btn[data-view]').forEach((btn) => btn.addEventListener('click', async () => {
   switchView(btn.dataset.view);
   if (btn.dataset.view === 'messages') await renderMessages();
 }));
 el('mobile-menu-toggle').addEventListener('click', () => {
   const mobileNav = el('mobile-nav');
+  const sidebar = el('left-sidebar');
   const willShow = mobileNav.classList.contains('hidden');
   mobileNav.classList.toggle('hidden', !willShow);
+  mobileNav.classList.toggle('drawer-open', willShow);
+  sidebar.classList.toggle('drawer-open', willShow);
   el('mobile-menu-toggle').setAttribute('aria-expanded', willShow ? 'true' : 'false');
 });
 
@@ -1197,19 +1314,54 @@ el('search-user').addEventListener('input', async () => {
   } catch {}
 });
 el('top-search-user').addEventListener('input', onTopSearchInput);
+
+el('online-search').addEventListener('input', renderOnlineSidebar);
+el('online-add-friend-cta').addEventListener('click', () => switchView('network'));
+el('topic-toggle').addEventListener('click', () => {
+  state.topicsExpanded = !state.topicsExpanded;
+  renderTopics();
+});
+el('post-content').addEventListener('input', () => {
+  const ta = el('post-content');
+  ta.style.height = 'auto';
+  ta.style.height = `${Math.min(ta.scrollHeight, 180)}px`;
+  persistComposerDraft();
+  updateComposerUiState();
+});
+el('discard-draft-btn').addEventListener('click', discardComposerDraft);
+el('composer-mention').addEventListener('click', () => { el('post-content').value = `${el('post-content').value}@`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
+el('composer-hashtag').addEventListener('click', () => { el('post-content').value = `${el('post-content').value} #`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
+el('composer-link').addEventListener('click', () => { el('post-content').value = `${el('post-content').value} https://`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
+document.querySelector('.post-tools-modern .emoji-btn').addEventListener('click', () => { el('post-content').value = `${el('post-content').value}😀`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
+el('sidebar-toggle').addEventListener('click', () => {
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  localStorage.setItem('cypherax_sidebar_collapsed', state.sidebarCollapsed ? '1' : '0');
+  el('left-sidebar').classList.toggle('collapsed', state.sidebarCollapsed);
+});
+
 el('message-emoji').addEventListener('click', () => {
   const input = el('message-input');
   input.value = `${input.value}😀`;
   input.focus();
 });
-el('post-image').addEventListener('change', () => {
+el('post-image').addEventListener('change', async () => {
   const file = el('post-image').files[0];
-  el('post-image-name').textContent = file ? file.name : 'No file selected';
+  try {
+    ensureSafeImageFile(file);
+    state.composerImageData = file ? await fileToDataUrl(file) : '';
+    renderComposerImagePreview();
+    persistComposerDraft();
+    updateComposerUiState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
 });
 el('cancel-edit-btn').addEventListener('click', () => {
   el('post-form').reset();
-  el('post-image-name').textContent = 'No file selected';
+  state.composerImageData = '';
+  renderComposerImagePreview();
   setEditingState(null);
+  updateComposerUiState();
 });
 el('message-image').addEventListener('change', () => {
   const file = el('message-image').files[0];
@@ -1285,13 +1437,11 @@ el('post-form').addEventListener('submit', async (e) => {
       return;
     }
 
-    const file = el('post-image').files[0];
-    ensureSafeImageFile(file);
-    const imageData = file ? await fileToDataUrl(file) : '';
+    const imageData = state.composerImageData || '';
     if (!content && !imageData) return;
     await api('/api/posts', { method: 'POST', body: JSON.stringify({ userId: state.user.id, content, imageData }) });
     e.target.reset();
-    el('post-image-name').textContent = 'No file selected';
+    discardComposerDraft();
     state.selectedProfile = null;
     await renderApp(true);
   } catch (err) {

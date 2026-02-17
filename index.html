@@ -58,18 +58,18 @@
         </div>
 
         <div class="topbar-actions top-icon-nav">
-          <button class="top-icon-btn active" data-view="feed" title="Feed">📰</button>
-          <button class="top-icon-btn" data-view="network" title="Friends">👥</button>
-          <button id="open-messages-btn" class="top-icon-btn" data-view="messages" title="Messages">💬</button>
+          <button class="top-icon-btn active" data-view="feed" title="Feed" data-tooltip="Feed">📰</button>
+          <button class="top-icon-btn" data-view="network" title="Friends" data-tooltip="Friends">👥</button>
+          <button id="open-messages-btn" class="top-icon-btn" data-view="messages" title="Messages" data-tooltip="Messages">💬</button>
           <div class="notif-wrap">
-            <button id="notification-bell" class="top-icon-btn" title="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
+            <button id="notification-bell" class="top-icon-btn" title="Notifications" data-tooltip="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
             <div id="notification-dropdown" class="notif-dropdown hidden">
               <div class="row notif-head"><strong>Notifications</strong><div class="actions"><button id="mark-all-read" type="button">Mark all as read</button><button id="view-all-notifications" type="button">View all</button></div></div>
               <div id="notification-dropdown-list" class="stack"></div>
             </div>
           </div>
-          <button class="top-icon-btn" data-view="settings" title="Settings">⚙️</button>
-          <button id="logout-btn" class="top-icon-btn danger" title="Logout">🚪</button>
+          <button class="top-icon-btn" data-view="settings" title="Settings" data-tooltip="Settings">⚙️</button>
+          <button id="logout-btn" class="top-icon-btn danger" title="Logout" data-tooltip="Logout">🚪</button>
           <button id="mobile-menu-toggle" class="mobile-only top-icon-btn" aria-expanded="false" aria-controls="mobile-nav">☰</button>
         </div>
       </header>
@@ -85,7 +85,8 @@
       </nav>
 
       <div class="grid">
-        <aside class="card sidebar">
+        <aside class="card sidebar collapsed" id="left-sidebar">
+          <button id="sidebar-toggle" class="sidebar-toggle" type="button" title="Toggle sidebar">⇔</button>
           <img id="profile-preview" class="avatar" alt="profile" />
           <h3 id="profile-name"></h3>
           <p id="status-text" class="small"></p>
@@ -102,14 +103,14 @@
               <div class="stat-item"><span class="small">Likes</span><strong id="stat-likes-week">0</strong></div>
             </div>
           </section>
-          <nav>
-            <button class="nav-btn active" data-view="feed">Feed</button>
-            <button class="nav-btn" data-view="network">Friends</button>
-            <button class="nav-btn" data-view="messages">Messages</button>
-        <button class="nav-btn" data-view="forum">Forum</button>
-            <button class="nav-btn" data-view="profile">Profile</button>
-            <button class="nav-btn" data-view="notifications">Notifications</button>
-            <button class="nav-btn" data-view="settings">Settings</button>
+          <nav class="sidebar-nav-icons">
+            <button class="nav-btn active" data-view="feed" title="Feed" data-tooltip="Feed">📰</button>
+            <button class="nav-btn" data-view="network" title="Friends" data-tooltip="Friends">👥</button>
+            <button class="nav-btn" data-view="messages" title="Messages" data-tooltip="Messages">💬</button>
+            <button class="nav-btn" data-view="forum" title="Forum" data-tooltip="Forum">🧠</button>
+            <button class="nav-btn" data-view="profile" title="Profile" data-tooltip="Profile">👤</button>
+            <button class="nav-btn" data-view="notifications" title="Notifications" data-tooltip="Notifications">🔔</button>
+            <button class="nav-btn" data-view="settings" title="Settings" data-tooltip="Settings">⚙️</button>
           </nav>
         </aside>
 
@@ -120,24 +121,28 @@
             <section class="topics card-soft">
               <h4>Interesting Topics</h4>
               <div id="topic-list" class="topic-list"></div>
+              <button id="topic-toggle" class="text-link hidden" type="button">Show more</button>
             </section>
 
             <h3>Share a post ✨</h3>
             <p id="editing-indicator" class="small hidden">✏️ Editing post...</p>
             <form id="post-form" class="post-form-modern">
-              <textarea id="post-content" maxlength="500" placeholder="Share your idea..." required></textarea>
-              <div class="row post-tools">
-                <label for="post-image" class="file-upload-btn">🚩 Choose file</label>
-                <input id="post-image" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-                <span id="post-image-name" class="small file-name">No file selected</span>
-                <div class="emoji-bar" data-target="post-content">
-                  <button type="button" class="emoji-btn">😀</button>
-                  <button type="button" class="emoji-btn">🔥</button>
-                  <button type="button" class="emoji-btn">🛡️</button>
-                  <button type="button" class="emoji-btn">💻</button>
+              <textarea id="post-content" maxlength="500" placeholder="Nə paylaşmaq istəyirsən?"></textarea>
+              <div id="post-image-preview" class="post-image-preview hidden"></div>
+              <div class="post-tools-modern">
+                <div class="composer-actions-left">
+                  <label for="post-image" class="composer-icon-btn" title="Attach image">📎</label>
+                  <input id="post-image" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                  <button type="button" class="composer-icon-btn emoji-btn" title="Emoji">😀</button>
+                  <button type="button" id="composer-mention" class="composer-icon-btn" title="Mention">@</button>
+                  <button type="button" id="composer-hashtag" class="composer-icon-btn" title="Hashtag">#</button>
+                  <button type="button" id="composer-link" class="composer-icon-btn" title="Link">🔗</button>
                 </div>
-                <button id="post-submit-btn" type="submit">Post</button>
-                <button id="cancel-edit-btn" class="danger hidden" type="button">Cancel edit</button>
+                <div class="composer-actions-right">
+                  <button id="discard-draft-btn" class="text-link" type="button">Discard draft</button>
+                  <button id="post-submit-btn" class="post-submit-gradient" type="submit" disabled>Post</button>
+                  <button id="cancel-edit-btn" class="danger hidden" type="button">Cancel edit</button>
+                </div>
               </div>
               <p class="small">Only images allowed, max 2MB upload.</p>
             </form>
@@ -286,7 +291,9 @@
         </section>
         <aside class="card online-sidebar" id="online-sidebar">
           <div class="row"><h3>Online</h3></div>
+          <input id="online-search" type="text" placeholder="Online dost axtar..." />
           <div id="online-friends-list" class="stack"></div>
+          <button id="online-add-friend-cta" class="hidden" type="button">Dost əlavə et</button>
         </aside>
 
       </div>

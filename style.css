@@ -729,3 +729,76 @@ button, input, textarea, select { width: 100%; }
   }
   .content { padding-bottom: 84px; }
 }
+
+/* ===== Premium refresh overrides ===== */
+:root {
+  --bg-main: #071325;
+  --bg-card: rgba(12, 30, 51, 0.72);
+  --line-soft: rgba(125, 187, 255, 0.24);
+  --glow-soft: 0 8px 26px rgba(26, 111, 184, 0.2);
+}
+body { background: radial-gradient(circle at 12% 8%, #132c4f, #071325 45%, #050d1b 100%); }
+.card, .card-soft, .post, .forum-post, .item { backdrop-filter: blur(14px); border-color: var(--line-soft); box-shadow: var(--glow-soft); }
+.top-icon-btn, .nav-btn, .icon-action, .composer-icon-btn { transition: all .2s ease; }
+.top-icon-btn:hover, .nav-btn:hover, .icon-action:hover, .composer-icon-btn:hover { box-shadow: 0 0 0 1px rgba(127, 196, 255, .4), 0 10px 22px rgba(28, 110, 173, .32); }
+
+/* Tooltips */
+[data-tooltip] { position: relative; }
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(6, 17, 30, 0.94);
+  border: 1px solid rgba(125, 187, 255, .3);
+  white-space: nowrap;
+}
+
+/* sidebar icon-only */
+.sidebar-toggle { width: 44px; height: 44px; border-radius: 12px; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; }
+.sidebar-nav-icons { display: grid; gap: 10px; }
+.sidebar-nav-icons .nav-btn { width: 44px; height: 44px; padding: 0; border-radius: 12px; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.sidebar.collapsed .avatar,
+.sidebar.collapsed #profile-name,
+.sidebar.collapsed #status-text,
+.sidebar.collapsed .sidebar-badges,
+.sidebar.collapsed .sidebar-stats { display: none; }
+.sidebar .nav-btn.active { box-shadow: 0 0 0 1px rgba(125, 187, 255, .5), 0 0 20px rgba(69, 160, 255, .35); }
+
+/* topics chips */
+.topic-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.topic-chip { width: auto !important; }
+.text-link { border: 0; background: transparent; color: #9ed6ff; width: auto; }
+
+/* Composer */
+.post-form-modern textarea { min-height: 108px; max-height: 180px; overflow-y: auto; resize: none; }
+.post-tools-modern { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.composer-actions-left, .composer-actions-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.composer-icon-btn { width: 42px; height: 42px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.post-submit-gradient { background: linear-gradient(120deg, #2f7fc8, #5ca9f3); border: 0; color: #fff; padding: 0 16px; min-width: 94px; height: 42px; border-radius: 10px; }
+.post-submit-gradient:disabled { opacity: .45; cursor: not-allowed; }
+.post-image-preview { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-soft); width: min(280px, 100%); }
+.post-image-preview img { width: 100%; display: block; }
+.remove-preview-btn { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 999px; padding: 0; }
+
+.feed-empty .skeleton-line { height: 12px; background: linear-gradient(90deg, rgba(115,165,209,.25), rgba(164,212,255,.35), rgba(115,165,209,.25)); border-radius: 10px; margin-bottom: 8px; }
+.feed-empty .skeleton-line:last-child { width: 66%; }
+
+.notif-dropdown { z-index: 1400; max-height: min(72vh, 420px); overflow: auto; }
+
+.online-sidebar input { width: 100%; margin-bottom: 8px; }
+
+@media (max-width: 1023px) {
+  .grid { grid-template-columns: 1fr !important; }
+  .online-sidebar { display: block; order: 9; }
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 1300; transform: translateX(-105%); width: 260px; overflow-y: auto; }
+  .sidebar.drawer-open { transform: translateX(0); }
+  .mobile-nav.drawer-open { display: grid; }
+  .post-tools-modern { align-items: stretch; }
+  .composer-actions-right { width: 100%; justify-content: space-between; }
+  .post-submit-gradient { width: 100%; }
+}
