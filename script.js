@@ -1335,7 +1335,6 @@ async function renderApp(resetFeed = false) {
   renderTopics();
   hydrateComposerDraft();
   updateComposerUiState();
-  el('left-sidebar').classList.toggle('collapsed', state.sidebarCollapsed);
   switchView(state.view);
   renderOnlineSidebar();
   await renderActiveView();
@@ -1363,7 +1362,12 @@ document.querySelectorAll('.forum-tab-btn').forEach((btn) => {
 
 el('register-form').addEventListener('submit', registerUser);
 el('login-form').addEventListener('submit', loginUser);
-el('logout-btn').addEventListener('click', logout);
+const logoutBtn = el('logout-btn');
+if (logoutBtn) logoutBtn.addEventListener('click', logout);
+const profileLogoutLink = el('profile-logout-link');
+if (profileLogoutLink) profileLogoutLink.addEventListener('click', logout);
+const profileSecurityLink = el('profile-security-link');
+if (profileSecurityLink) profileSecurityLink.addEventListener('click', async () => { switchView('settings'); await renderActiveView(); });
 document.querySelectorAll('[data-nav]').forEach((btn) => btn.addEventListener('click', async (e) => {
   e.preventDefault();
   const targetView = btn.dataset.nav;
@@ -1380,6 +1384,16 @@ if (toggleActiveBtn) {
     state.user = { ...data.user, token: state.user?.token };
     localStorage.setItem(SESSION_KEY, JSON.stringify(state.user));
     await renderApp(true);
+  });
+}
+
+
+const topProfileBtn = el('top-profile-btn');
+if (topProfileBtn) {
+  topProfileBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const panel = el('profile-dropdown');
+    if (panel) panel.classList.toggle('hidden');
   });
 }
 
@@ -1421,12 +1435,6 @@ el('composer-mention').addEventListener('click', () => { el('post-content').valu
 el('composer-hashtag').addEventListener('click', () => { el('post-content').value = `${el('post-content').value} #`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
 el('composer-link').addEventListener('click', () => { el('post-content').value = `${el('post-content').value} https://`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
 document.querySelector('.post-tools-modern .emoji-btn').addEventListener('click', () => { el('post-content').value = `${el('post-content').value}😀`; el('post-content').focus(); persistComposerDraft(); updateComposerUiState(); });
-el('sidebar-toggle').addEventListener('click', () => {
-  state.sidebarCollapsed = !state.sidebarCollapsed;
-  localStorage.setItem('cypherax_sidebar_collapsed', state.sidebarCollapsed ? '1' : '0');
-  el('left-sidebar').classList.toggle('collapsed', state.sidebarCollapsed);
-});
-
 el('message-emoji').addEventListener('click', () => {
   const input = el('message-input');
   input.value = `${input.value}😀`;
@@ -1509,6 +1517,10 @@ document.addEventListener('click', (event) => {
   }
   if (!event.target.closest('.notif-wrap')) {
     el('notification-dropdown').classList.add('hidden');
+  }
+  if (!event.target.closest('.profile-wrap')) {
+    const pd = el('profile-dropdown');
+    if (pd) pd.classList.add('hidden');
   }
 });
 

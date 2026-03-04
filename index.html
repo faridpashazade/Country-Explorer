@@ -58,10 +58,6 @@
         </div>
 
         <div class="topbar-actions top-icon-nav">
-          <button type="button" class="top-icon-btn active" data-view="feed" data-nav="feed" title="Feed" data-tooltip="Feed">📰</button>
-          <button type="button" class="top-icon-btn" data-view="network" data-nav="network" title="Friends" data-tooltip="Friends">👥</button>
-          <button type="button" id="open-messages-btn" class="top-icon-btn" data-view="messages" data-nav="messages" title="Messages" data-tooltip="Messages">💬</button>
-          <button type="button" class="top-icon-btn" data-view="forum" data-nav="forum" title="Forum" data-tooltip="Forum">🧠</button>
           <div class="notif-wrap">
             <button type="button" id="notification-bell" class="top-icon-btn" title="Notifications" data-tooltip="Notifications">🔔<span id="notification-badge" class="notif-badge hidden">0</span></button>
             <div id="notification-dropdown" class="notif-dropdown hidden">
@@ -69,53 +65,41 @@
               <div id="notification-dropdown-list" class="stack"></div>
             </div>
           </div>
-          <button type="button" class="top-icon-btn" data-view="settings" data-nav="settings" title="Settings" data-tooltip="Settings">⚙️</button>
-          <button type="button" id="top-profile-btn" class="top-icon-btn" data-view="profile" data-nav="profile" title="Profile" data-tooltip="Profile"><img id="top-profile-avatar" class="mini-avatar" alt="profile" /></button>
-          <button type="button" id="logout-btn" class="top-icon-btn danger" title="Logout" data-tooltip="Logout">🚪</button>
+          <button type="button" id="open-messages-btn" class="top-icon-btn" data-view="messages" data-nav="messages" title="Messages" data-tooltip="Messages">💬</button>
+          <div class="profile-wrap">
+            <button type="button" id="top-profile-btn" class="top-icon-btn" data-view="profile" data-nav="profile" title="Profile" data-tooltip="Profile"><img id="top-profile-avatar" class="mini-avatar" alt="profile" /></button>
+            <div id="profile-dropdown" class="profile-dropdown hidden">
+              <button type="button" data-nav="profile">👤 Profile</button>
+              <button type="button" data-nav="settings">⚙️ Settings</button>
+              <button type="button" data-nav="settings" id="profile-security-link">🔐 Security</button>
+              <button type="button" id="profile-logout-link">🚪 Logout</button>
+            </div>
+          </div>
           <button type="button" id="mobile-menu-toggle" class="mobile-only top-icon-btn" aria-expanded="false" aria-controls="mobile-nav">☰</button>
         </div>
       </header>
 
       <nav id="mobile-nav" class="card mobile-nav hidden">
-        <button type="button" class="nav-btn" data-view="feed" data-nav="feed" title="Feed">📰</button>
-        <button type="button" class="nav-btn" data-view="network" data-nav="network" title="Friends">👥</button>
-        <button type="button" class="nav-btn" data-view="messages" data-nav="messages" title="Messages">💬</button>
-        <button type="button" class="nav-btn" data-view="forum" data-nav="forum" title="Forum">🧠</button>
-        <button type="button" class="nav-btn" data-view="profile" data-nav="profile" title="Profile">👤</button>
-        <button type="button" class="nav-btn" data-view="notifications" data-nav="notifications" title="Notifications">🔔</button>
-        <button type="button" class="nav-btn" data-view="settings" data-nav="settings" title="Settings">⚙️</button>
+        <button type="button" class="nav-btn" data-view="feed" data-nav="feed" title="Home">🏠 Home</button>
+        <button type="button" class="nav-btn" data-view="network" data-nav="network" title="Explore">🔎 Explore</button>
+        <button type="button" class="nav-btn" data-view="forum" data-nav="forum" title="Topics"># Topics</button>
+        <button type="button" class="nav-btn" data-view="profile" data-nav="profile" title="Profile">👤 Profile</button>
       </nav>
 
       <div class="grid">
-        <aside class="card sidebar collapsed" id="left-sidebar">
-          <button id="sidebar-toggle" class="sidebar-toggle" type="button" title="Toggle sidebar">⇔</button>
-          <img id="profile-preview" class="avatar" alt="profile" />
-          <h3 id="profile-name"></h3>
-          <p id="status-text" class="small"></p>
-          <button id="edit-status-btn" class="icon-btn status-edit-btn" type="button" title="Edit status">✏️</button>
-          <section class="sidebar-badges">
-            <h4>Badges</h4>
-            <div id="badge-list" class="chip-wrap"></div>
-          </section>
-          <section class="sidebar-stats">
-            <h4>This week stats</h4>
-            <div class="stats-grid">
-              <div class="stat-item"><span class="small">Posts</span><strong id="stat-posts-week">0</strong></div>
-              <div class="stat-item"><span class="small">Replies</span><strong id="stat-replies-week">0</strong></div>
-              <div class="stat-item"><span class="small">Likes</span><strong id="stat-likes-week">0</strong></div>
-            </div>
-          </section>
+        <aside class="card sidebar" id="left-sidebar">
+          <div class="sidebar-nav-text">
+            <button type="button" class="nav-btn active" data-view="feed" data-nav="feed">🏠 <span>Home</span></button>
+            <button type="button" class="nav-btn" data-view="network" data-nav="network">🔎 <span>Explore</span></button>
+            <button type="button" class="nav-btn" data-view="forum" data-nav="forum"># <span>Topics</span></button>
+            <button type="button" class="nav-btn" data-view="notifications" data-nav="notifications">🔖 <span>Saved</span></button>
+            <button type="button" class="nav-btn" data-view="profile" data-nav="profile">👤 <span>Profile</span></button>
+          </div>
         </aside>
 
         <section class="card content">
           <div id="feed-view" class="view">
             <div id="selected-profile-card" class="item hidden"></div>
-
-            <section class="topics card-soft">
-              <h4>Interesting Topics</h4>
-              <div id="topic-list" class="topic-list"></div>
-              <button id="topic-toggle" class="text-link hidden" type="button">Show more</button>
-            </section>
 
             <h3>Share a post ✨</h3>
             <p id="editing-indicator" class="small hidden">✏️ Editing post...</p>
@@ -283,10 +267,17 @@
           </div>
         </section>
         <aside class="card online-sidebar" id="online-sidebar">
-          <div class="row"><h3>Online</h3></div>
-          <input id="online-search" type="text" placeholder="Online dost axtar..." />
-          <div id="online-friends-list" class="stack"></div>
-          <button type="button" id="online-add-friend-cta" class="hidden">Dost əlavə et</button>
+          <section class="card-soft right-widget">
+            <div class="row"><h4>Interesting Topics</h4></div>
+            <div id="topic-list" class="topic-list"></div>
+            <button id="topic-toggle" class="text-link hidden" type="button">Show more</button>
+          </section>
+          <section class="card-soft right-widget">
+            <div class="row"><h4>Online</h4></div>
+            <input id="online-search" type="text" placeholder="Search online..." />
+            <div id="online-friends-list" class="stack"></div>
+            <button type="button" id="online-add-friend-cta" class="hidden">Add friend</button>
+          </section>
         </aside>
 
       </div>
