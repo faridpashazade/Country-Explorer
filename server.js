@@ -263,7 +263,7 @@ async function handleApi(req, res, urlObj) {
       const password = String(body.password || '');
       if (!/^[\w.-]{3,20}$/.test(username)) return json(res, 400, { error: 'Username invalid' });
       if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { error: 'Email invalid' });
-      if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) return json(res, 400, { error: 'Password policy failed' });
+      if (password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
       if (db.users.some((u) => u.email === email)) return json(res, 409, { error: 'Email already exists' });
       if (db.users.some((u) => u.username.toLowerCase() === username.toLowerCase())) return json(res, 409, { error: 'Username already exists' });
       db.users.push({ id: uid(), username, email, passwordHash: hash(password), emailChanged: 0, profileImage: '', active: true, statusEncrypted: Buffer.from('Blue team standby').toString('base64'), createdAt: now() });
@@ -675,7 +675,7 @@ async function handleApi(req, res, urlObj) {
       if (profileImage) user.profileImage = profileImage;
       user.statusEncrypted = Buffer.from(status || 'Blue team mode').toString('base64');
       if (newPass) {
-        if (newPass.length < 8 || !/[A-Z]/.test(newPass) || !/[0-9]/.test(newPass)) return json(res, 400, { error: 'Password policy failed' });
+        if (newPass.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
         user.passwordHash = hash(newPass);
       }
       if (newEmail) {

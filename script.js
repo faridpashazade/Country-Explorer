@@ -135,7 +135,12 @@ async function api(path, options = {}) {
   const token = state.user?.token || '';
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(path, { ...options, headers });
+  let res;
+  try {
+    res = await fetch(path, { ...options, headers });
+  } catch {
+    throw new Error('Serverə qoşulmaq olmadı. Backend işlədiyini yoxla.');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401) {
@@ -261,12 +266,14 @@ function ensureSafeImageFile(file) {
 async function registerUser(e) {
   e.preventDefault();
   try {
+    const password = el('register-password').value;
+    if (password.length < 8) throw new Error('Parol minimum 8 simvol olmalıdır.');
     await api('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({
         username: sanitize(el('register-username').value, 20),
         email: sanitize(el('register-email').value, 120),
-        password: el('register-password').value
+        password
       })
     });
     setAuthMsg('Registration successful. Login now.');
@@ -1291,6 +1298,34 @@ function connectEmojiButtons() {
   });
 }
 
+async function renderActiveView() {
+  if (state.view === 'feed') {
+    renderSelectedProfileCard();
+    renderFeed();
+    return;
+  }
+  if (state.view === 'network') {
+    renderNetwork();
+    return;
+  }
+  if (state.view === 'notifications') {
+    renderNotifications();
+    return;
+  }
+  if (state.view === 'forum') {
+    renderForumTopics();
+    await renderForumPosts();
+    return;
+  }
+  if (state.view === 'profile') {
+    await renderProfileView();
+    return;
+  }
+  if (state.view === 'messages') {
+    await renderMessages();
+  }
+}
+
 async function renderApp(resetFeed = false) {
   if (!state.user) return toggleAuth(false);
   toggleAuth(true);
@@ -1302,15 +1337,8 @@ async function renderApp(resetFeed = false) {
   updateComposerUiState();
   el('left-sidebar').classList.toggle('collapsed', state.sidebarCollapsed);
   switchView(state.view);
-  renderSelectedProfileCard();
-  renderFeed();
-  renderNetwork();
   renderOnlineSidebar();
-  renderNotifications();
-  renderForumTopics();
-  await renderForumPosts();
-  await renderProfileView();
-  await renderMessages();
+  await renderActiveView();
   if (!socket && state.user?.token) setupSocket();
 }
 
@@ -1343,7 +1371,7 @@ document.querySelectorAll('[data-nav]').forEach((btn) => btn.addEventListener('c
   switchView(targetView);
   el('left-sidebar').classList.remove('drawer-open');
   el('mobile-nav').classList.add('hidden');
-  if (targetView === 'messages') await renderMessages();
+  await renderActiveView();
 }));
 const toggleActiveBtn = el('toggle-active-btn');
 if (toggleActiveBtn) {
@@ -1376,7 +1404,7 @@ el('search-user').addEventListener('input', async () => {
 el('top-search-user').addEventListener('input', onTopSearchInput);
 
 el('online-search').addEventListener('input', renderOnlineSidebar);
-el('online-add-friend-cta').addEventListener('click', () => switchView('network'));
+el('online-add-friend-cta').addEventListener('click', async () => { switchView('network'); await renderActiveView(); });
 el('topic-toggle').addEventListener('click', () => {
   state.topicsExpanded = !state.topicsExpanded;
   renderTopics();

@@ -869,3 +869,40 @@ button,
     z-index: 1350;
   }
 }
+
+/* performance + lightweight visual refresh */
+:root {
+  --card-shadow-lite: 0 4px 14px rgba(0, 0, 0, .18);
+}
+.card, .card-soft, .post, .forum-post, .item {
+  box-shadow: var(--card-shadow-lite) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.layout { padding: 12px; }
+.content { padding: 14px; }
+.sidebar { display: none !important; }
+.grid { grid-template-columns: minmax(0, 1fr) !important; }
+button, .top-icon-btn, .icon-action { transition: background-color .16s ease, transform .16s ease; }
+button:hover, .top-icon-btn:hover, .icon-action:hover { transform: translateY(-1px); }
+
+/* cleaner settings */
+#settings-view .settings-group h4,
+#settings-view label { font-size: 0; }
+#settings-view .settings-group h4::after {
+  font-size: 14px;
+  color: #cce8ff;
+}
+#settings-view .settings-group:nth-of-type(1) h4::after { content: '👤'; }
+#settings-view .settings-group:nth-of-type(2) h4::after { content: '🔐'; }
+#settings-view .settings-group:nth-of-type(3) h4::after { content: '📧'; }
+#settings-view .settings-group:nth-of-type(4) h4::after { content: '🛡️'; }
+
+/* mobile chat stability */
+#messages-view .dm-chat { overflow: hidden; }
+#messages-view .dm-thread { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 900px) {
+  .topbar { padding: 10px; }
+  .top-search-wrap { width: 100%; }
+  #top-search-user { width: 100%; }
+}
